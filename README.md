@@ -69,12 +69,13 @@ på nytt uten ny transkripsjon eller ny akkordgjenkjenning – det tar bare seku
 
 ## Minne og fart
 
-- Under 15 GB RAM: tekstmodellen kjører i bfloat16 med `beams=1` (~4,5 GB, ~7 min for en 4-min-låt på 2 CPU-kjerner).
-- 15 GB eller mer: `beams=5`, som gir best tekst. Apple Silicon (MPS) og NVIDIA (CUDA) er mye raskere
-  (float16; både Demucs og Whisper bruker GPU-en, med automatisk reserve til CPU).
+- **GPU (Apple Silicon/MPS eller NVIDIA/CUDA):** float16, og `beams=5` (best tekst) når maskinen har ≥15 GB RAM.
+  Både Demucs og Whisper bruker GPU-en, med automatisk reserve til CPU.
+- **Bare CPU:** `beams=1` (3–5x raskere enn beams=5, litt dårligere tekst). bfloat16 under 15 GB RAM.
 - Overstyr med `--beams 1..5`.
 - Modellene lastes aldri samtidig: vokal → språk → tekst → akkorder, med minnet frigjort mellom hvert steg.
   Appen kjører hver låt i en egen prosess, så alt minne gis tilbake når låta er ferdig.
+- «Kjør på nytt» gjenbruker utskilt vokal og akkorder, så bare teksten gjøres på nytt.
 
 ## Fremdriftsprotokoll (for appen)
 

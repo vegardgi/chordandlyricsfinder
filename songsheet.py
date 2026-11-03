@@ -516,7 +516,7 @@ def main():
     ap.add_argument("--lang", default="auto",
                     help="auto (standard), no (bokmål), nn (nynorsk), en, eller annen Whisper-kode")
     ap.add_argument("--beams", type=int, default=None,
-                    help="5 = best (krever ~16 GB RAM), 1 = raskest. Standard: velges etter RAM")
+                    help="5 = best, 1 = raskest. Standard: 5 på GPU/MPS med ≥15 GB RAM, ellers 1")
     ap.add_argument("--sequential", action="store_true",
                     help="Whispers egen lange modus i stedet for 28-sek-biter (krever mye RAM)")
     ap.add_argument("--no-separate", action="store_true", help="hopp over Demucs")
@@ -546,7 +546,8 @@ def main():
         say("• Tekst: leser lyd")
         y = load_audio(src, 16000, mono=True)             # dekodes én gang, brukes til begge
         lang, model = resolve_language(y, a.lang, a.model)
-        beams = a.beams or (5 if ram_gb() >= 15 else 1)
+        # beams=5 gir litt bedre tekst, men er 3–5x tregere på CPU -> bare på GPU/MPS
+        beams = a.beams or (5 if device() != "cpu" and ram_gb() >= 15 else 1)
         words = transcribe(y, model, lang, beams, not a.sequential)
         del y
         write_json(wfile, words)
