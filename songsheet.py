@@ -159,7 +159,8 @@ def separate_vocals(audio, outdir):
                 prog((d["segment_offset"] + 1) / d["audio_length"])
 
         def run(dev):
-            sep = Separator("htdemucs", device=dev, callback=cb, overlap=0.1)   # 0.25 -> 0.1: ~10 % raskere
+            # overlap 0.25 -> 0.1: ~10 % raskere; shifts=0: ingen tilfeldig forskyvning -> samme resultat hver gang
+            sep = Separator("htdemucs", device=dev, callback=cb, overlap=0.1, shifts=0)
             with torch.inference_mode():
                 _, stems = sep.separate_tensor(torch.from_numpy(mix), 44100)
             return stems["vocals"].mean(0).cpu().numpy()
@@ -465,7 +466,7 @@ def fw_detect(model, y, sr=16000):
             total[c] = total.get(c, 0.0) + p
         best = max(total.values()) / n
         nordic = sum(total.get(c, 0) for c in NORDIC) / n
-        if max(best, nordic) >= 0.8:                      # sikker nok – spar resten
+        if max(best, nordic) >= 0.75:                     # sikker nok – spar resten
             break
     prob = {c: p / n for c, p in total.items()}
     nordic = sum(prob.get(c, 0) for c in NORDIC)
