@@ -465,7 +465,7 @@ def fw_detect(model, y, sr=16000):
             total[c] = total.get(c, 0.0) + p
         best = max(total.values()) / n
         nordic = sum(total.get(c, 0) for c in NORDIC) / n
-        if max(best, nordic) >= 0.9:                      # sikker nok – spar resten
+        if max(best, nordic) >= 0.8:                      # sikker nok – spar resten
             break
     prob = {c: p / n for c, p in total.items()}
     nordic = sum(prob.get(c, 0) for c in NORDIC)
@@ -655,12 +655,13 @@ def to_chordpro(blocks, title, artist=None, key=None):
 
 # ---------------------------------------------------------------- akkorder
 
-def find_chords(audio, cache, redo=False):
+def find_chords(audio, cache, redo=False, quiet=False):
     """Rå lv-chordia-segmenter (Harte-labels). Bufres i <navn>.chords.raw.json."""
     if os.path.exists(cache) and not redo:
         say("• Akkorder: gjenbruker " + os.path.basename(cache))
         return read_json(cache)
-    say("• Akkorder: lv-chordia")
+    if not quiet:
+        say("• Akkorder: lv-chordia")
     src, tmp = audio, None
     if not soundfile_can_read(audio):                     # f.eks. m4a: dekod til wav først
         import soundfile
@@ -698,6 +699,22 @@ def fast_lyrics(y, a, timer):
     free_memory()
     return words
 
+def start_background_chords(audio, base, redo):
+    import threading, torch
+    torch.set_num_threads(max(1, (os.cpu_count() or 4) // 2))
+
+    class Job(threading.Thread):
+        error = None
+
+        def run(self):
+            try:
+                find_chords(audio, base + ".chords.raw.json", redo, quiet=True)
+            except Exception as e:  # noqa: BLE001
+                self.error = f"{type(e).__name__}: {e}"
+    job = Job(daemon=True)
+    job.start()
+    return job
+
 # ---------------------------------------------------------------- main
 
 def main():
@@ -729,6 +746,7 @@ def main():
     base = os.path.splitext(audio)[0]
 
     timer = Timer()
+    chord_job = None
     wfile = base + ".words.json"
     if os.path.exists(wfile) and not a.redo_lyrics:
         words = repair_words(read_json(wfile))
@@ -742,6 +760,10 @@ def main():
         y = load_audio(src, 16000, mono=True)             # dekodes én gang, brukes til begge
         fast = have_fast() and not a.slow and not a.sequential
         words = None
+        if fast and not (os.path.exists(base + ".chords.raw.json") and not a.redo_chords):
+            # akkordene bruker ~2 kjerner og tekstgjenkjenningen utnytter ikke alle hele
+            # tida -> kjør akkordene i bakgrunnen samtidig (lite minne, CTranslate2 er eget)
+            chord_job = start_background_chords(audio, base, a.redo_chords)
         if fast:
             try:
                 words = fast_lyrics(y, a, timer)
@@ -759,8 +781,12 @@ def main():
         free_memory()
         timer.lap("tekst")
 
-    # akkorder etter teksten -> de to modellene ligger ikke i minnet samtidig
-    raw = find_chords(audio, base + ".chords.raw.json", a.redo_chords)
+    if chord_job is not None:
+        say("• Akkorder: lv-chordia (startet i bakgrunnen)")
+        chord_job.join()
+        if chord_job.error:
+            say(f"! Akkorder i bakgrunnen feilet ({chord_job.error}) – prøver på nytt")
+    raw = find_chords(audio, base + ".chords.raw.json", a.redo_chords and chord_job is None)
     key = estimate_key(raw)                               # staver Db/Gb eller C#/F# etter toneart
     names = FLAT if a.flats else SHARP if a.sharps else names_for_key(key)
     chords = clean(raw, a.min_len, names)
