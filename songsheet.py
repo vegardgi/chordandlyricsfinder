@@ -17,7 +17,7 @@ Akkorder lagres i sang.chords.raw.json og gjenbrukes på samme måte (--redo-cho
 
 Fremdrift på stderr:  "• Steg: ..."  (nytt steg),  "! ..."  (advarsel),  "% 42"  (prosent i steget)
 """
-import argparse, gc, json, math, os, re, sys
+import argparse, gc, json, math, os, re, sys, time
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from chords import recognize, clean, MIXED, FLAT, SHARP  # noqa: E402
@@ -25,6 +25,22 @@ from chords import recognize, clean, MIXED, FLAT, SHARP  # noqa: E402
 
 def say(msg):
     print(msg, file=sys.stderr, flush=True)
+
+
+class Timer:
+    """Måler tid per steg: t.lap("tekst") etter hvert steg."""
+    def __init__(self):
+        self.t0 = self.last = time.time()
+        self.laps = []
+
+    def lap(self, name):
+        now = time.time()
+        self.laps.append((name, now - self.last))
+        self.last = now
+
+    def report(self):
+        parts = [f"{n} {d:.0f} s" for n, d in self.laps if d >= 0.5]
+        return ", ".join(parts + [f"totalt {time.time() - self.t0:.0f} s"])
 
 
 class Progress:
@@ -535,6 +551,7 @@ def main():
     base = os.path.splitext(audio)[0]
     names = FLAT if a.flats else SHARP if a.sharps else MIXED
 
+    timer = Timer()
     wfile = base + ".words.json"
     if os.path.exists(wfile) and not a.redo_lyrics:
         words = repair_words(read_json(wfile))
@@ -543,19 +560,23 @@ def main():
         src = audio
         if not a.no_separate:
             src = separate_vocals(audio, os.path.join(os.path.dirname(audio), "separated")) or audio
+            timer.lap("vokal")
         say("• Tekst: leser lyd")
         y = load_audio(src, 16000, mono=True)             # dekodes én gang, brukes til begge
         lang, model = resolve_language(y, a.lang, a.model)
+        timer.lap("språk")
         # beams=5 gir litt bedre tekst, men er 3–5x tregere på CPU -> bare på GPU/MPS
         beams = a.beams or (5 if device() != "cpu" and ram_gb() >= 15 else 1)
         words = transcribe(y, model, lang, beams, not a.sequential)
         del y
         write_json(wfile, words)
         free_memory()
+        timer.lap("tekst")
 
     # akkorder etter teksten -> de to modellene ligger ikke i minnet samtidig
     raw = find_chords(audio, base + ".chords.raw.json", a.redo_chords)
     chords = clean(raw, a.min_len, names)
+    timer.lap("akkorder")
     write_json(base + ".chords.json", chords, indent=2)
 
     title, artist = audio_tags(audio)
@@ -568,6 +589,7 @@ def main():
             print(cho)
         except UnicodeEncodeError:                        # gammel Windows-konsoll
             print(cho.encode("ascii", "replace").decode())
+    say(f"• Tid: {timer.report()}")
     say(f"• Skrev {base}.cho")
 
 
