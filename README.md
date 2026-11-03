@@ -7,7 +7,10 @@ Lydfil inn → ChordPro med tekst og akkorder over riktig ord. Alt kjører lokal
   no/nn/da/sv regnes sammen fordi norsk sang ofte feiltolkes som svensk)
   - norsk → NB-Whisper fra Nasjonalbiblioteket (bokmål/nynorsk)
   - engelsk og andre språk → OpenAI Whisper large-v3-turbo
+  - kjøres med faster-whisper (CTranslate2, int8) – 2x raskere enn transformers, med beam 5
   - tidsstempel per ord
+- **Toneart:** estimeres fra akkordene; akkordene staves etter den (Db/Gb i Db-dur, C#/F# i A-dur)
+  og `{key: …}` skrives i ChordPro
 - **Vokalseparasjon:** Demucs (valgfritt, gir mye bedre tekst på låter med band)
 
 ## Appen (dra og slipp)
@@ -34,7 +37,7 @@ Lukk terminalvinduet for å stoppe appen. Starter du den når den allerede kjør
 åpnes bare nettleseren. Jobbene ligger i `jobber/<id>/` og vises igjen etter omstart.
 
 Første låt laster i tillegg ned modellene: Whisper turbo ~1,6 GB (språkgjenkjenning og engelsk
-tekst), NB-Whisper medium ~1,5 GB (norsk tekst), Demucs ~80 MB.
+tekst), NB-Whisper medium ~3 GB (norsk tekst), Demucs ~80 MB, akkordmodellen følger med pakken.
 
 ## Kommandolinje
 
@@ -49,6 +52,8 @@ python songsheet.py sang.mp3 --model NbAiLab/nb-whisper-large   # best, tregere
 python songsheet.py sang.mp3 --no-separate           # raskere, uten Demucs
 python songsheet.py sang.mp3 --redo-lyrics           # transkriber teksten på nytt
 python songsheet.py sang.mp3 --redo-chords           # finn akkordene på nytt
+python songsheet.py sang.mp3 --beams 1               # enda raskere tekst, litt dårligere
+python songsheet.py sang.mp3 --flats                 # alltid b (standard: etter toneart)
 
 python chords.py sang.mp3                            # bare akkorder (txt/json/cho)
 python app.py [--no-browser]                         # appen uten startskript
@@ -67,15 +72,35 @@ Filer som lages ved siden av lydfila:
 **Tips:** Rett feil i `sang.words.json` (feilhørte ord) og kjør på nytt. Akkordene flettes inn
 på nytt uten ny transkripsjon eller ny akkordgjenkjenning – det tar bare sekunder.
 
-## Minne og fart
+## Fart og minne
 
-- **GPU (Apple Silicon/MPS eller NVIDIA/CUDA):** float16, og `beams=5` (best tekst) når maskinen har ≥15 GB RAM.
-  Både Demucs og Whisper bruker GPU-en, med automatisk reserve til CPU.
-- **Bare CPU:** `beams=1` (3–5x raskere enn beams=5, litt dårligere tekst). bfloat16 under 15 GB RAM.
-- Overstyr med `--beams 1..5`.
-- Modellene lastes aldri samtidig: vokal → språk → tekst → akkorder, med minnet frigjort mellom hvert steg.
-  Appen kjører hver låt i en egen prosess, så alt minne gis tilbake når låta er ferdig.
+Målt på en skymaskin med 4 CPU-kjerner uten GPU (den tregeste plattformen appen er laget for):
+
+| Låt | Vokal (Demucs) | Språk | Tekst | Akkorder | Totalt |
+|---|---|---|---|---|---|
+| Aldri Langt Borte (3:07) | 82 s | 10 s | 61 s | 13 s | **2:46** |
+| På fjell (3:37) | 93 s | 17 s | ~100 s (akkorder parallelt) | – | **~3:35** |
+| Original-koden, samme maskin (2:48-låt) | 110 s | 30 s | 270 s | 15 s | 7:00 |
+
+Minnetopp: ~7 GB (før: 11,7 GB). På Apple Silicon kjører Demucs på GPU (MPS) og faster-whisper
+bruker Apples Accelerate, så det bør gå klart raskere enn tallene over (ikke målt ennå).
+Uten «Skill ut vokal» spares hele Demucs-steget. Hver låt rapporterer tid per steg
+(«Tid: vokal …, språk …, tekst …, akkorder …») nederst i forhåndsvisningen og i loggen.
+
+Slik er det gjort raskt:
+
+- Tekst med **faster-whisper** (CTranslate2 int8 på CPU/Mac, float16 på NVIDIA). NB-Whisper
+  publiserer CT2-vekter selv (`ct2/`). Låta deles i 28-sek-vinduer med 2 s overlapp som dekodes i
+  batch (Whispers egen lange modus hopper over vers i sang), og ordene flettes i skjøtene.
+- **Vinduer uten sang** (intro, mellomspill, outro) hoppes over – raskere og ingen «hallusinert» tekst.
+- **Språk** stopper etter første klipp når den er ≥80 % sikker.
+- **Akkordene** kjøres i bakgrunnen mens teksten gjenkjennes (de bruker ~2 kjerner).
+- Demucs kjører i samme prosess (ingen ekstra oppstart), overlapp 0,1, på GPU når det finnes.
+- Lyden dekodes én gang med PyAV (ingen ffmpeg nødvendig).
+- Modellene lastes aldri samtidig (bortsett fra den lille akkordmodellen). Appen kjører hver
+  låt i en egen prosess, så alt minne gis tilbake når låta er ferdig.
 - «Kjør på nytt» gjenbruker utskilt vokal og akkorder, så bare teksten gjøres på nytt.
+- Reserve: `--slow` bruker transformers-løypa (samme modeller) hvis faster-whisper ikke virker.
 
 ## Fremdriftsprotokoll (for appen)
 
