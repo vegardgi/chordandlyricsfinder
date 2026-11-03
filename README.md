@@ -3,7 +3,8 @@
 Lydfil inn → ChordPro med tekst og akkorder over riktig ord. Alt kjører lokalt.
 
 - **Akkorder:** lv-chordia (C, C/B, Em7, D/F#, G7sus4 …)
-- **Tekst:** språket gjenkjennes automatisk
+- **Tekst:** språket gjenkjennes automatisk (Whisper turbo på klippene med mest sang;
+  no/nn/da/sv regnes sammen fordi norsk sang ofte feiltolkes som svensk)
   - norsk → NB-Whisper fra Nasjonalbiblioteket (bokmål/nynorsk)
   - engelsk og andre språk → OpenAI Whisper large-v3-turbo
   - tidsstempel per ord
@@ -32,8 +33,8 @@ Deretter åpnes appen i nettleseren på <http://localhost:8765>.
 Lukk terminalvinduet for å stoppe appen. Starter du den når den allerede kjører,
 åpnes bare nettleseren. Jobbene ligger i `jobber/<id>/` og vises igjen etter omstart.
 
-Første låt laster i tillegg ned modellene: Whisper base ~150 MB (språk), NB-Whisper medium
-~1,5 GB, Whisper turbo ~1,6 GB første gang du kjører en engelsk låt, Demucs ~80 MB.
+Første låt laster i tillegg ned modellene: Whisper turbo ~1,6 GB (språkgjenkjenning og engelsk
+tekst), NB-Whisper medium ~1,5 GB (norsk tekst), Demucs ~80 MB.
 
 ## Kommandolinje
 

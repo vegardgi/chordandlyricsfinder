@@ -174,26 +174,51 @@ MODELS = {
 }
 OTHER_MODEL = "openai/whisper-large-v3-turbo"
 NORDIC = {"no", "nn", "nb", "da", "sv"}   # sang på norsk feiltolkes ofte som dansk/svensk
-DETECT_MODEL = "openai/whisper-base"
+DETECT_MODEL = "openai/whisper-large-v3-turbo"   # whisper-base bommer ofte på sang
+
+
+def pick_clips(y, sr=16000, n=3, length=30):
+    """Velg n klipp à 30 sek med mest lydenergi (= mest sang i vokalsporet)."""
+    import numpy as np
+    half = length * sr // 2
+    if len(y) <= 2 * half:
+        return [y]
+    cands = []
+    for frac in (0.15, 0.25, 0.35, 0.45, 0.55, 0.65, 0.75, 0.85):
+        mid = int(len(y) * frac)
+        clip = y[max(0, mid - half): mid + half]
+        cands.append((float(np.sqrt(np.mean(clip ** 2))), frac, clip))
+    best = sorted(cands, key=lambda c: -c[0])[:n]
+    return [c[2] for c in sorted(best, key=lambda c: c[1])]
 
 
 def detect_language(y, sr=16000):
-    """Gjett språk fra tre 30-sek-klipp (30/50/70 % inn i låta), flertall vinner."""
+    """Språk fra klippene med mest sang. Sannsynlighetene summeres, og no/nn/da/sv
+    regnes sammen (norsk sang feiltolkes ofte som svensk/dansk)."""
     import torch
-    from collections import Counter
     from transformers import WhisperProcessor, WhisperForConditionalGeneration
+    from transformers.models.whisper.tokenization_whisper import LANGUAGES
+    dev = device()
+    dtype = torch.float16 if dev in ("cuda", "mps") else torch.float32
     proc = WhisperProcessor.from_pretrained(DETECT_MODEL)
-    model = WhisperForConditionalGeneration.from_pretrained(DETECT_MODEL)
-    votes = []
-    for frac in (0.3, 0.5, 0.7):
-        mid = int(len(y) * frac)
-        clip = y[max(0, mid - 15 * sr): mid + 15 * sr]
-        feats = proc(clip, sampling_rate=sr, return_tensors="pt").input_features
+    model = WhisperForConditionalGeneration.from_pretrained(DETECT_MODEL, dtype=dtype).to(dev).eval()
+    codes = list(LANGUAGES)
+    tok = proc.tokenizer
+    ids = tok.convert_tokens_to_ids([f"<|{c}|>" for c in codes])
+    sot = torch.tensor([[tok.convert_tokens_to_ids("<|startoftranscript|>")]], device=dev)
+    total = torch.zeros(len(codes))
+    for clip in pick_clips(y, sr):
+        feats = proc(clip, sampling_rate=sr, return_tensors="pt").input_features.to(dev, dtype)
         with torch.no_grad():
-            ids = model.detect_language(feats)
-        votes.append(proc.tokenizer.decode(ids[0]).strip("<|>"))
-    lang = Counter(votes).most_common(1)[0][0]
-    say(f"• Språk: {votes} -> {lang}")
+            logits = model(input_features=feats, decoder_input_ids=sot).logits[0, -1, ids]
+        total += torch.softmax(logits.float(), -1).cpu()
+    total /= total.sum()
+    prob = dict(zip(codes, total.tolist()))
+    nordic = sum(prob.get(c, 0) for c in NORDIC)
+    best = max(prob, key=prob.get)
+    lang = "no" if nordic >= prob[best] else best
+    top = sorted(prob.items(), key=lambda kv: -kv[1])[:3]
+    say("• Språk: " + ", ".join(f"{c} {p:.0%}" for c, p in top) + f" (nordisk {nordic:.0%}) -> {lang}")
     del model
     free_memory()
     return lang
@@ -202,7 +227,7 @@ def detect_language(y, sr=16000):
 def resolve_language(y, lang, model):
     """Returnerer (whisper-språkkode, modell)."""
     if lang == "auto":
-        say("• Språk: lytter på tre klipp")
+        say("• Språk: lytter på klippene med mest sang")
         try:
             lang = detect_language(y)
         except Exception as e:
