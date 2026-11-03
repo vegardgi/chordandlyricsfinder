@@ -78,10 +78,14 @@ def save_meta(j):
         pass
 
 
+NOISE = re.compile(r"(Loading weights|Warning: You are sending unauthenticated|Inference: |"
+                   r"\[transformers\] (Using `chunk_length_s`|Passing `generation_config`))")
+
+
 def log_tail(j, n=14):
     try:
         with open(os.path.join(job_dir(j["id"]), "logg.txt"), encoding="utf-8") as f:
-            lines = [ln.rstrip() for ln in f if ln.strip()]
+            lines = [ln.rstrip() for ln in f if ln.strip() and not NOISE.match(ln)]
     except OSError:
         return ""
     tb = next((i for i, ln in enumerate(lines) if ln.startswith("Traceback")), None)
