@@ -1,0 +1,10 @@
+lv-chordia>=1.1
+transformers>=4.56
+torch
+librosa
+demucs>=4.1
+av
+soundfile
+fastapi
+uvicorn
+python-multipart

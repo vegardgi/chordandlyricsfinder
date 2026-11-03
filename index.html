@@ -1,0 +1,541 @@
+<!doctype html>
+<html lang="no">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Akkordverktøy</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🎸</text></svg>">
+<style>
+  :root {
+    --bg: #f6f5f1;
+    --card: #ffffff;
+    --text: #22231f;
+    --muted: #6d6e66;
+    --line: #e3e1da;
+    --accent: #2f6f62;
+    --accent-soft: #e2efeb;
+    --chord: #b0461e;
+    --danger: #b3261e;
+    --danger-soft: #fbe9e7;
+    --bar: #d9e7e2;
+    --shadow: 0 1px 2px rgba(0,0,0,.04), 0 2px 10px rgba(0,0,0,.04);
+    color-scheme: light;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #161715;
+      --card: #1f201d;
+      --text: #e9e8e2;
+      --muted: #9a9b92;
+      --line: #33342f;
+      --accent: #7cc4b2;
+      --accent-soft: #23332e;
+      --chord: #f0a37a;
+      --danger: #f2a39b;
+      --danger-soft: #3a2220;
+      --bar: #2b3a35;
+      --shadow: none;
+      color-scheme: dark;
+    }
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; background: var(--bg); color: var(--text); }
+  body {
+    font: 15px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, Roboto, sans-serif;
+    -webkit-font-smoothing: antialiased;
+  }
+  main { max-width: 860px; margin: 0 auto; padding: 32px 20px 80px; }
+  header { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin-bottom: 20px; }
+  h1 { font-size: 22px; font-weight: 650; letter-spacing: -.01em; margin: 0; }
+  h1 small { display: block; font-size: 13px; font-weight: 400; color: var(--muted); letter-spacing: 0; }
+
+  button, .btn {
+    font: inherit; font-size: 14px; color: var(--text); background: var(--card);
+    border: 1px solid var(--line); border-radius: 8px; padding: 6px 12px; cursor: pointer;
+    text-decoration: none; display: inline-flex; align-items: center; gap: 6px; white-space: nowrap;
+  }
+  button:hover, .btn:hover { border-color: var(--muted); }
+  button:focus-visible, .btn:focus-visible, select:focus-visible, input:focus-visible, textarea:focus-visible {
+    outline: 2px solid var(--accent); outline-offset: 2px;
+  }
+  button.primary { background: var(--accent); border-color: var(--accent); color: var(--card); }
+  button.danger { color: var(--danger); }
+  button.quiet { border-color: transparent; background: transparent; color: var(--muted); }
+  button.quiet:hover { color: var(--text); border-color: var(--line); }
+  button:disabled { opacity: .5; cursor: default; }
+
+  .options { display: flex; flex-wrap: wrap; gap: 10px 22px; align-items: center; margin: 0 0 12px; color: var(--muted); font-size: 14px; }
+  .options label { display: inline-flex; align-items: center; gap: 8px; cursor: pointer; }
+  select {
+    font: inherit; font-size: 14px; color: var(--text); background: var(--card);
+    border: 1px solid var(--line); border-radius: 8px; padding: 5px 8px;
+  }
+  input[type=checkbox] { accent-color: var(--accent); width: 16px; height: 16px; margin: 0; }
+
+  .drop {
+    border: 2px dashed var(--line); border-radius: 16px; background: var(--card);
+    padding: 54px 24px; text-align: center; cursor: pointer; transition: border-color .15s, background .15s;
+  }
+  .drop:hover, .drop.over { border-color: var(--accent); background: var(--accent-soft); }
+  .drop .big { font-size: 18px; font-weight: 600; margin: 8px 0 4px; }
+  .drop .small { color: var(--muted); font-size: 14px; }
+  .drop svg { color: var(--accent); }
+
+  #overlay {
+    position: fixed; inset: 0; background: color-mix(in srgb, var(--accent) 14%, transparent);
+    border: 3px dashed var(--accent); display: none; align-items: center; justify-content: center;
+    font-size: 22px; font-weight: 600; color: var(--accent); z-index: 50; pointer-events: none;
+    backdrop-filter: blur(2px);
+  }
+  #overlay.show { display: flex; }
+
+  #banner { display: none; margin: 16px 0 0; padding: 10px 14px; border-radius: 10px;
+            background: var(--danger-soft); color: var(--danger); font-size: 14px; }
+  #banner.show { display: block; }
+
+  #jobs { margin-top: 26px; display: flex; flex-direction: column; gap: 12px; }
+  .empty { text-align: center; color: var(--muted); font-size: 14px; padding: 18px 0; }
+
+  .job { background: var(--card); border: 1px solid var(--line); border-radius: 12px; box-shadow: var(--shadow); }
+  .job-head { display: flex; align-items: center; gap: 12px; padding: 14px 16px; }
+  .job.done .job-head { cursor: pointer; }
+  .job-title { flex: 1; min-width: 0; }
+  .job-name { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .job-sub { color: var(--muted); font-size: 13px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .job-time { color: var(--muted); font-size: 13px; font-variant-numeric: tabular-nums; white-space: nowrap; }
+  .dot { width: 9px; height: 9px; border-radius: 50%; background: var(--line); flex: none; }
+  .job.running .dot { background: var(--accent); animation: pulse 1.4s ease-in-out infinite; }
+  .job.done .dot { background: var(--accent); }
+  .job.error .dot { background: var(--danger); }
+  @keyframes pulse { 50% { opacity: .35; } }
+  @media (prefers-reduced-motion: reduce) { .job.running .dot { animation: none; } }
+
+  .bar { height: 4px; background: var(--bar); margin: 0 16px 14px; border-radius: 4px; overflow: hidden; }
+  .bar > i { display: block; height: 100%; width: 0; background: var(--accent); border-radius: 4px; transition: width .6s ease; }
+  .job.done .bar, .job.error .bar, .job.cancelled .bar { display: none; }
+
+  .job-body { border-top: 1px solid var(--line); padding: 14px 16px 16px; }
+  .actions { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 14px; }
+  .actions .spacer { flex: 1; }
+  .retry-row { display: none; flex-wrap: wrap; gap: 10px 16px; align-items: center; padding: 10px 12px;
+               margin: -4px 0 14px; border-radius: 10px; background: var(--accent-soft); font-size: 14px; }
+  .retry-row.show { display: flex; }
+  .retry-row label { display: inline-flex; align-items: center; gap: 8px; }
+
+  .err-msg { color: var(--danger); font-weight: 600; margin: 0 0 8px; }
+  pre.log {
+    margin: 0 0 12px; padding: 10px 12px; background: var(--bg); border: 1px solid var(--line); border-radius: 8px;
+    font: 12px/1.5 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; white-space: pre-wrap; word-break: break-word;
+    max-height: 220px; overflow: auto; color: var(--muted);
+  }
+
+  /* ChordPro-visning */
+  .sheet { font-size: 16px; line-height: 1.25; overflow-x: auto; padding-bottom: 4px; }
+  .sheet h2 { font-size: 20px; margin: 0; font-weight: 650; }
+  .sheet .artist { color: var(--muted); margin: 2px 0 0; }
+  .sheet .meta { color: var(--muted); font-size: 13px; margin: 6px 0 0; }
+  .sheet .comment { color: var(--muted); font-style: italic; font-size: 14px; margin: 14px 0 6px; }
+  .sheet .gap { height: 14px; }
+  .sheet .ln { margin: 0 0 6px; white-space: nowrap; }
+  .sheet .seg { display: inline-flex; flex-direction: column; vertical-align: bottom; }
+  .sheet .c { color: var(--chord); font-weight: 650; font-size: 14px; min-height: 1.3em; padding-right: .45em; white-space: pre; }
+  .sheet .l { white-space: pre; }
+  .sheet .ln.only-chords .seg { margin-right: .6em; }
+  .sheet .ln.only-chords .l { display: none; }
+  .sheet .ln.no-chords .c { display: none; }
+  .sheet .chorus { border-left: 3px solid var(--accent); padding-left: 12px; margin: 6px 0; }
+  .sheet .header { margin-bottom: 14px; }
+
+  textarea.editor {
+    width: 100%; min-height: 380px; resize: vertical; padding: 12px; border-radius: 8px;
+    border: 1px solid var(--line); background: var(--bg); color: var(--text);
+    font: 13px/1.55 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; tab-size: 4;
+  }
+
+  #toast { position: fixed; left: 50%; bottom: 24px; transform: translateX(-50%) translateY(20px);
+           background: var(--text); color: var(--bg); padding: 9px 16px; border-radius: 10px; font-size: 14px;
+           opacity: 0; transition: opacity .2s, transform .2s; pointer-events: none; z-index: 60; max-width: 90vw; }
+  #toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+
+  footer { margin-top: 36px; color: var(--muted); font-size: 13px; text-align: center; }
+  .sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
+  @media (max-width: 560px) {
+    header { flex-direction: column; align-items: flex-start; }
+    .drop { padding: 36px 16px; }
+  }
+</style>
+</head>
+<body>
+<div id="overlay">Slipp lydfilene her</div>
+<main>
+  <header>
+    <h1>Akkordverktøy <small>Lydfil inn → ChordPro med tekst og akkorder</small></h1>
+    <button id="open-folder" type="button" title="Åpner mappa «ferdige» der alle .cho-filer lagres">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>
+      Åpne mappe med ferdige filer
+    </button>
+  </header>
+
+  <div class="options">
+    <label>Språk
+      <select id="lang">
+        <option value="auto">Auto</option>
+        <option value="no">Bokmål</option>
+        <option value="nn">Nynorsk</option>
+        <option value="en">Engelsk</option>
+      </select>
+    </label>
+    <label><input type="checkbox" id="separate" checked> Skill ut vokal (bedre tekst)</label>
+  </div>
+
+  <div class="drop" id="drop" role="button" tabindex="0" aria-label="Velg eller slipp lydfiler">
+    <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></svg>
+    <div class="big">Slipp lydfiler her</div>
+    <div class="small">eller klikk for å velge · mp3, wav, m4a, flac, ogg, aiff · flere filer samtidig</div>
+    <input type="file" id="file" class="sr" multiple accept="audio/*,.mp3,.wav,.m4a,.flac,.ogg,.aac,.aiff,.aif,.opus">
+  </div>
+
+  <div id="banner"></div>
+  <section id="jobs" aria-live="polite"></section>
+  <footer>Alt kjører lokalt på maskinen din. Første låt tar lengre tid fordi modellene lastes ned.</footer>
+</main>
+<div id="toast" role="status"></div>
+
+<script>
+"use strict";
+const AUDIO = ["mp3", "wav", "m4a", "flac", "ogg", "aac", "aiff", "aif", "opus"];
+const LANGS = { auto: "Auto", no: "Bokmål", nn: "Nynorsk", en: "Engelsk" };
+const $ = (s, el = document) => el.querySelector(s);
+const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+
+// ------------------------------------------------------------ innstillinger
+const langSel = $("#lang"), sepBox = $("#separate");
+try {
+  const saved = JSON.parse(localStorage.getItem("akkord-opts") || "{}");
+  if (saved.lang in LANGS) langSel.value = saved.lang;
+  if (typeof saved.separate === "boolean") sepBox.checked = saved.separate;
+} catch (e) { /* ingen lagring */ }
+const saveOpts = () => { try { localStorage.setItem("akkord-opts", JSON.stringify({ lang: langSel.value, separate: sepBox.checked })); } catch (e) {} };
+langSel.onchange = sepBox.onchange = saveOpts;
+
+// ------------------------------------------------------------ små hjelpere
+let toastTimer;
+function toast(msg) {
+  const t = $("#toast");
+  t.textContent = msg; t.classList.add("show");
+  clearTimeout(toastTimer); toastTimer = setTimeout(() => t.classList.remove("show"), 2600);
+}
+async function api(method, url, body) {
+  const opt = { method, headers: {} };
+  if (body instanceof FormData) opt.body = body;
+  else if (body !== undefined) { opt.body = JSON.stringify(body); opt.headers["Content-Type"] = "application/json"; }
+  const r = await fetch(url, opt);
+  if (!r.ok) {
+    let msg = r.statusText;
+    try { msg = (await r.json()).detail || msg; } catch (e) {}
+    throw new Error(msg);
+  }
+  return r.headers.get("content-type")?.includes("json") ? r.json() : r.text();
+}
+function fmtTime(s) {
+  s = Math.max(0, Math.round(s));
+  const h = Math.floor(s / 3600), m = Math.floor(s % 3600 / 60), sec = String(s % 60).padStart(2, "0");
+  return h ? `${h}:${String(m).padStart(2, "0")}:${sec}` : `${m}:${sec}`;
+}
+async function copyText(text) {
+  try { await navigator.clipboard.writeText(text); return true; }
+  catch (e) {
+    const ta = document.createElement("textarea");
+    ta.value = text; ta.style.position = "fixed"; ta.style.opacity = "0";
+    document.body.appendChild(ta); ta.select();
+    const ok = document.execCommand("copy"); ta.remove(); return ok;
+  }
+}
+
+// ------------------------------------------------------------ ChordPro -> HTML
+function renderChordPro(src) {
+  const out = [];
+  let header = [], inChorus = false;
+  const lines = src.replace(/\r\n?/g, "\n").split("\n");
+  const flushHeader = () => {
+    if (header.length) { out.push(`<div class="header">${header.join("")}</div>`); header = []; }
+  };
+  for (const raw of lines) {
+    const line = raw.replace(/\s+$/, "");
+    const d = line.match(/^\s*\{\s*([a-zA-Z_]+)\s*(?::\s*(.*?))?\s*\}\s*$/);
+    if (d) {
+      const key = d[1].toLowerCase(), val = d[2] || "";
+      if (key === "title" || key === "t") header.push(`<h2>${esc(val)}</h2>`);
+      else if (key === "subtitle" || key === "st" || key === "artist") header.push(`<p class="artist">${esc(val)}</p>`);
+      else if (["key", "tempo", "time", "capo"].includes(key)) header.push(`<p class="meta">${esc(key === "key" ? "Toneart" : key[0].toUpperCase() + key.slice(1))}: ${esc(val)}</p>`);
+      else if (["comment", "c", "comment_italic", "ci", "highlight"].includes(key)) { flushHeader(); out.push(`<p class="comment">${esc(val)}</p>`); }
+      else if (key === "start_of_chorus" || key === "soc") { flushHeader(); out.push(`<div class="chorus">`); inChorus = true; }
+      else if ((key === "end_of_chorus" || key === "eoc") && inChorus) { out.push(`</div>`); inChorus = false; }
+      continue;
+    }
+    flushHeader();
+    if (line.startsWith("#")) continue;                 // ChordPro-kommentar
+    if (!line.trim()) { out.push(`<div class="gap"></div>`); continue; }
+    const parts = line.split(/\[([^\]]*)\]/);           // tekst, akkord, tekst, akkord ...
+    const segs = [];
+    if (parts[0]) segs.push({ c: "", l: parts[0] });
+    for (let i = 1; i < parts.length; i += 2) segs.push({ c: parts[i], l: parts[i + 1] || "" });
+    const hasChords = segs.some(s => s.c), hasText = segs.some(s => s.l.trim());
+    const cls = !hasText ? "only-chords" : !hasChords ? "no-chords" : "";
+    const html = segs.map(s =>
+      `<span class="seg"><span class="c">${esc(s.c)}</span><span class="l">${esc(s.l) || (hasText ? "&nbsp;" : "")}</span></span>`
+    ).join("");
+    out.push(`<div class="ln ${cls}">${html}</div>`);
+  }
+  flushHeader();
+  if (inChorus) out.push(`</div>`);
+  return out.join("");
+}
+
+// ------------------------------------------------------------ opplasting
+const drop = $("#drop"), fileInput = $("#file");
+drop.onclick = () => fileInput.click();
+drop.onkeydown = e => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); fileInput.click(); } };
+fileInput.onchange = () => { upload([...fileInput.files]); fileInput.value = ""; };
+
+let dragDepth = 0;
+const hasFiles = e => [...(e.dataTransfer?.types || [])].includes("Files");
+window.addEventListener("dragenter", e => { if (!hasFiles(e)) return; e.preventDefault(); dragDepth++; $("#overlay").classList.add("show"); drop.classList.add("over"); });
+window.addEventListener("dragover", e => { if (hasFiles(e)) { e.preventDefault(); e.dataTransfer.dropEffect = "copy"; } });
+window.addEventListener("dragleave", e => { if (!hasFiles(e)) return; if (--dragDepth <= 0) { dragDepth = 0; $("#overlay").classList.remove("show"); drop.classList.remove("over"); } });
+window.addEventListener("drop", e => {
+  if (!hasFiles(e)) return;
+  e.preventDefault(); dragDepth = 0;
+  $("#overlay").classList.remove("show"); drop.classList.remove("over");
+  upload([...e.dataTransfer.files]);
+});
+
+async function upload(files) {
+  const ok = [], skipped = [];
+  for (const f of files) (AUDIO.includes(f.name.split(".").pop().toLowerCase()) ? ok : skipped).push(f);
+  if (skipped.length) toast(`Hoppet over ${skipped.map(f => f.name).join(", ")} – ikke en lydfil`);
+  for (const f of ok) {
+    const fd = new FormData();
+    fd.append("file", f);
+    fd.append("lang", langSel.value);
+    fd.append("separate", sepBox.checked ? "true" : "false");
+    try {
+      const j = await api("POST", "/api/jobs", fd);
+      expanded.add(j.id);
+      poll(true);
+    } catch (e) { toast(`${f.name}: ${e.message}`); }
+  }
+}
+
+$("#open-folder").onclick = async () => {
+  try { await api("POST", "/api/open-folder"); }
+  catch (e) { toast("Kunne ikke åpne mappa: " + e.message); }
+};
+
+// ------------------------------------------------------------ jobbliste
+const jobsEl = $("#jobs");
+const cards = new Map();        // id -> {el, job, state}
+const expanded = new Set();     // id-er der forhåndsvisningen er åpen
+let lastData = [], serverOk = true;
+
+function statusLine(j) {
+  const opts = `${LANGS[j.lang] || j.lang}${j.separate ? " · vokalseparasjon" : ""}`;
+  if (j.status === "queued") return `I kø · ${opts}`;
+  if (j.status === "running") return `${j.stage}${j.detail ? " – " + j.detail : ""}`;
+  if (j.status === "done") {
+    const used = j.lang_used ? (LANGS[j.lang_used] || j.lang_used) : (LANGS[j.lang] || j.lang);
+    return `Ferdig · ${j.lang === "auto" && j.lang_used ? "Auto → " : ""}${used}${j.separate ? " · vokalseparasjon" : ""}`;
+  }
+  if (j.status === "error") return `Feilet · ${j.error || ""}`;
+  if (j.status === "cancelled") return "Avbrutt";
+  return j.stage || "";
+}
+function elapsed(j) {
+  if (!j.started) return "";
+  const end = j.finished || Date.now() / 1000;
+  return fmtTime(end - j.started);
+}
+
+function makeCard(j) {
+  const el = document.createElement("article");
+  el.className = "job";
+  el.innerHTML = `
+    <div class="job-head">
+      <span class="dot" aria-hidden="true"></span>
+      <div class="job-title"><div class="job-name"></div><div class="job-sub"></div></div>
+      <span class="job-time"></span>
+      <button class="quiet cancel" type="button" title="Avbryt">Avbryt</button>
+    </div>
+    <div class="bar"><i></i></div>
+    <div class="job-body" hidden></div>`;
+  const state = { editing: false, retryOpen: false, renderedKey: null };
+  $(".job-name", el).textContent = j.name;
+  $(".job-head", el).onclick = e => {
+    if (e.target.closest("button")) return;
+    const c = cards.get(j.id);
+    if (c.job.status !== "done") return;
+    expanded.has(j.id) ? expanded.delete(j.id) : expanded.add(j.id);
+    update(c.job);
+  };
+  $(".cancel", el).onclick = async () => {
+    try { await api("POST", `/api/jobs/${j.id}/cancel`); poll(true); } catch (e) { toast(e.message); }
+  };
+  cards.set(j.id, { el, job: j, state });
+  return el;
+}
+
+function bodyFor(j, state) {
+  const body = document.createElement("div");
+  if (j.status === "done") {
+    if (state.editing) {
+      body.innerHTML = `
+        <div class="actions">
+          <button class="primary save" type="button">Lagre</button>
+          <button class="cancel-edit" type="button">Avbryt</button>
+          <span class="spacer"></span>
+          <span class="job-sub">ChordPro: [Akkord] rett foran ordet</span>
+        </div>
+        <textarea class="editor" spellcheck="false"></textarea>`;
+      const ta = $("textarea", body);
+      ta.value = j.cho || "";
+      $(".save", body).onclick = async () => {
+        try {
+          await api("PUT", `/api/jobs/${j.id}/cho`, { cho: ta.value });
+          j.cho = ta.value; state.editing = false; toast("Lagret");
+          update(j, true); poll(true);
+        } catch (e) { toast("Kunne ikke lagre: " + e.message); }
+      };
+      $(".cancel-edit", body).onclick = () => { state.editing = false; update(j, true); };
+      ta.addEventListener("keydown", e => {
+        if ((e.metaKey || e.ctrlKey) && e.key === "s") { e.preventDefault(); $(".save", body).click(); }
+        if (e.key === "Escape") $(".cancel-edit", body).click();
+      });
+      setTimeout(() => ta.focus(), 0);
+      return body;
+    }
+    body.innerHTML = `
+      <div class="actions">
+        <a class="btn" href="/api/jobs/${j.id}/cho" download>Last ned .cho</a>
+        <button class="copy" type="button">Kopier</button>
+        <button class="edit" type="button">Rediger</button>
+        <span class="spacer"></span>
+        <button class="retry" type="button">Kjør på nytt …</button>
+        <button class="danger del" type="button">Slett</button>
+      </div>
+      ${retryRow(j, state)}
+      <div class="sheet">${renderChordPro(j.cho || "")}</div>`;
+    $(".copy", body).onclick = async () => toast(await copyText(j.cho || "") ? "Kopiert" : "Kunne ikke kopiere");
+    $(".edit", body).onclick = () => { state.editing = true; update(j, true); };
+  } else if (j.status === "error" || j.status === "cancelled") {
+    body.innerHTML = `
+      ${j.status === "error" ? `<p class="err-msg">${esc(j.error || "Noe gikk galt")}</p>` : ""}
+      ${j.log ? `<pre class="log">${esc(j.log)}</pre>` : ""}
+      <div class="actions">
+        ${j.separate ? `<button class="primary retry-nosep" type="button">Prøv igjen uten vokalseparasjon</button>` : ""}
+        <button class="retry" type="button">Prøv igjen …</button>
+        <span class="spacer"></span>
+        <button class="danger del" type="button">Slett</button>
+      </div>
+      ${retryRow(j, state)}`;
+    const ns = $(".retry-nosep", body);
+    if (ns) ns.onclick = () => retry(j, { separate: false });
+  }
+  const del = $(".del", body);
+  if (del) del.onclick = async () => {
+    if (!confirm(`Slette «${j.name}»? Lydfila og resultatet i jobbmappa fjernes (kopien i «ferdige» blir liggende).`)) return;
+    try { await api("DELETE", `/api/jobs/${j.id}`); poll(true); } catch (e) { toast(e.message); }
+  };
+  const rb = $(".retry", body);
+  if (rb) rb.onclick = () => { state.retryOpen = !state.retryOpen; update(j, true); };
+  const go = $(".retry-go", body);
+  if (go) go.onclick = () => retry(j, {
+    lang: $(".r-lang", body).value, separate: $(".r-sep", body).checked,
+  });
+  return body;
+}
+
+function retryRow(j, state) {
+  const opts = Object.entries(LANGS).map(([v, t]) => `<option value="${v}" ${v === j.lang ? "selected" : ""}>${t}</option>`).join("");
+  return `<div class="retry-row ${state.retryOpen ? "show" : ""}">
+      <label>Språk <select class="r-lang">${opts}</select></label>
+      <label><input type="checkbox" class="r-sep" ${j.separate ? "checked" : ""}> Skill ut vokal</label>
+      <button class="primary retry-go" type="button">Start ny gjenkjenning</button>
+      ${j.status === "done" ? `<span class="job-sub">Teksten gjenkjennes på nytt – egne endringer i .cho overskrives.</span>` : ""}
+    </div>`;
+}
+
+async function retry(j, opts) {
+  const c = cards.get(j.id);
+  if (c) c.state.retryOpen = false;
+  try { await api("POST", `/api/jobs/${j.id}/retry`, opts); expanded.add(j.id); poll(true); }
+  catch (e) { toast(e.message); }
+}
+
+function update(j, force = false) {
+  const c = cards.get(j.id);
+  c.job = j;
+  const { el, state } = c;
+  el.className = `job ${j.status}`;
+  $(".job-sub", el).textContent = statusLine(j);
+  $(".job-time", el).textContent = elapsed(j);
+  $(".bar > i", el).style.width = `${Math.round((j.progress || 0) * 100)}%`;
+  $(".cancel", el).hidden = !(j.status === "running" || j.status === "queued");
+
+  const body = $(".job-body", el);
+  const show = (j.status === "done" && expanded.has(j.id)) || j.status === "error" || j.status === "cancelled";
+  if (!show) { body.hidden = true; body.innerHTML = ""; state.renderedKey = null; return; }
+  if (state.editing && !force) return;              // ikke rør teksten mens du redigerer
+  const key = [j.status, j.cho, j.error, j.log, state.editing, state.retryOpen, j.lang, j.separate].join("\u0001");
+  if (key === state.renderedKey && !force) return;
+  state.renderedKey = key;
+  body.hidden = false;
+  body.replaceChildren(bodyFor(j, state));
+}
+
+function render(list) {
+  lastData = list;
+  const ids = new Set(list.map(j => j.id));
+  for (const [id, c] of cards) if (!ids.has(id)) { c.el.remove(); cards.delete(id); expanded.delete(id); }
+  let prev = null;
+  for (const j of list) {
+    let c = cards.get(j.id);
+    if (!c) { makeCard(j); c = cards.get(j.id); }
+    const before = c.job.status;
+    if (before !== "done" && j.status === "done" && c.state.seen) expanded.add(j.id);   // ble nettopp ferdig
+    c.state.seen = true;
+    update(j);
+    const want = prev ? prev.nextSibling : jobsEl.firstChild;
+    if (c.el !== want) jobsEl.insertBefore(c.el, want);
+    prev = c.el;
+  }
+  let empty = $(".empty", jobsEl);
+  if (!list.length && !empty) jobsEl.insertAdjacentHTML("beforeend", `<p class="empty">Ingen låter ennå. Slipp en lydfil over for å starte.</p>`);
+  if (list.length && empty) empty.remove();
+}
+
+let pollTimer = null, polling = false;
+async function poll(now = false) {
+  if (now) { clearTimeout(pollTimer); }
+  if (polling) { if (now) pollTimer = setTimeout(() => poll(true), 200); return; }
+  polling = true;
+  try {
+    const list = await api("GET", "/api/jobs");
+    if (!serverOk) { serverOk = true; $("#banner").classList.remove("show"); }
+    render(list);
+  } catch (e) {
+    serverOk = false;
+    const b = $("#banner");
+    b.textContent = "Får ikke kontakt med Akkordverktøy. Er programmet lukket? Start det igjen med Start.command / start.bat.";
+    b.classList.add("show");
+  } finally {
+    polling = false;
+    clearTimeout(pollTimer);
+    pollTimer = setTimeout(poll, 1500);
+  }
+}
+// sekundteller mellom pollene
+setInterval(() => { for (const c of cards.values()) if (c.job.status === "running") $(".job-time", c.el).textContent = elapsed(c.job); }, 1000);
+poll();
+</script>
+</body>
+</html>

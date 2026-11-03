@@ -1,0 +1,15 @@
+.venv/
+jobber/
+ferdige/
+separated/
+__pycache__/
+*.pyc
+.DS_Store
+# lydfiler og resultater fra testkjøringer
+*.mp3
+*.wav
+*.m4a
+*.flac
+*.words.json
+*.chords.json
+*.chords.raw.json
