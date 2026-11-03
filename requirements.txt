@@ -1,4 +1,5 @@
 lv-chordia>=1.1
+faster-whisper>=1.1
 transformers>=4.56
 torch
 librosa

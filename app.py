@@ -20,7 +20,7 @@ PORT = int(os.environ.get("AKKORD_PORT", 8765))
 AUDIO_EXT = {".mp3", ".wav", ".m4a", ".flac", ".ogg", ".aac", ".aiff", ".aif", ".opus"}
 LANGS = {"auto", "no", "nn", "en"}
 META_KEYS = ("id", "name", "audio", "lang", "separate", "status", "stage", "progress",
-             "error", "created", "started", "finished", "lang_used")
+             "error", "created", "started", "finished", "lang_used", "timing")
 
 os.makedirs(JOBS_DIR, exist_ok=True)
 os.makedirs(OUT_DIR, exist_ok=True)
@@ -31,9 +31,9 @@ order = []           # eldste først
 work = queue.Queue()
 lock = threading.RLock()
 
-# Steg: nøkkel -> (visningsnavn, vekt). Vektene er omtrentlig andel av tida på CPU.
-STEPS = {"sep": ("Skiller ut vokal", 0.22), "lang": ("Finner språk", 0.05),
-         "text": ("Gjenkjenner tekst", 0.53), "chords": ("Finner akkorder", 0.20)}
+# Steg: nøkkel -> (visningsnavn, vekt). Vektene er målt andel av tida på CPU (3-min-låt).
+STEPS = {"sep": ("Skiller ut vokal", 0.48), "lang": ("Finner språk", 0.07),
+         "text": ("Gjenkjenner tekst", 0.36), "chords": ("Finner akkorder", 0.09)}
 
 
 def classify(line):
@@ -166,6 +166,9 @@ class Tracker:
         if line.startswith("•"):
             key, skipped = classify(line)
             body = line.lstrip("• ").strip()
+            if body.startswith("Tid:"):
+                set_job(self.jid, timing=body[4:].strip())
+                return
             if key == "done":
                 return
             if key in self.span:
@@ -206,7 +209,7 @@ def run_job(jid):
     with lock:
         j = jobs[jid]
         j.update(status="running", stage="Starter", progress=0.01, detail="", error=None,
-                 log=None, started=time.time(), finished=None, cho=None)
+                 log=None, started=time.time(), finished=None, cho=None, timing=None)
         save_meta(j)
         audio = audio_path(j)
         base = out_base(j)

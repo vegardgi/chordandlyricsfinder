@@ -20,7 +20,7 @@ Fremdrift på stderr:  "• Steg: ..."  (nytt steg),  "! ..."  (advarsel),  "% 4
 import argparse, gc, json, math, os, re, sys, time
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from chords import recognize, clean, MIXED, FLAT, SHARP  # noqa: E402
+from chords import recognize, clean, estimate_key, names_for_key, key_name, MIXED, FLAT, SHARP  # noqa: E402
 
 
 def say(msg):
@@ -159,8 +159,9 @@ def separate_vocals(audio, outdir):
                 prog((d["segment_offset"] + 1) / d["audio_length"])
 
         def run(dev):
-            sep = Separator("htdemucs", device=dev, callback=cb)
-            _, stems = sep.separate_tensor(torch.from_numpy(mix), 44100)
+            sep = Separator("htdemucs", device=dev, callback=cb, overlap=0.1)   # 0.25 -> 0.1: ~10 % raskere
+            with torch.inference_mode():
+                _, stems = sep.separate_tensor(torch.from_numpy(mix), 44100)
             return stems["vocals"].mean(0).cpu().numpy()
 
         try:
@@ -348,7 +349,8 @@ def repair_words(words, per_word=0.45, max_word=8.0):
     for k, w in enumerate(words):
         nxt = words[k + 1]["text"].lower() if k + 1 < len(words) else ""
         bare = w["text"].lower().strip(",.")
-        if len(bare) <= 2 and bare.isalpha() and nxt.startswith(bare) and len(nxt) > len(bare) + 2:
+        if len(bare) <= 2 and bare.isalpha() and not re.search(r"[aeiouyæøåé]", bare) \
+                and nxt.startswith(bare) and len(nxt) > len(bare) + 2:
             continue
         out.append(w)
     return out
@@ -414,6 +416,158 @@ def transcribe(y, model, lang, beams, chunked=True, sr=16000):
         words.append({"start": float(s), "end": float(e if e is not None else s + 0.3),
                       "text": t})
     return repair_words(words)
+
+# ---------------------------------------------------------------- rask tekst (CTranslate2)
+#
+# faster-whisper (CTranslate2, int8 på CPU) er 2–4x raskere enn transformers med samme modell.
+# Låta deles i overlappende 28-sek-vinduer som dekodes i batch (som transformers' chunking –
+# Whispers egen lange modus hopper over vers i sang), og ordene flettes ved skjøtene.
+
+FW_ALIASES = {"openai/whisper-large-v3-turbo": "large-v3-turbo", "openai/whisper-large-v3": "large-v3",
+              "openai/whisper-medium": "medium", "openai/whisper-small": "small"}
+WIN, STRIDE = 28.0, 2.0              # vindu og overlapp på hver side (4,67 s gav ingen bedre tekst, 30 % tregere)
+
+
+def have_fast():
+    try:
+        import ctranslate2, faster_whisper  # noqa: F401
+        return True
+    except Exception:
+        return False
+
+
+def fw_load(name):
+    """HF-modellnavn -> faster_whisper.WhisperModel (int8 på CPU/Mac, float16 på CUDA)."""
+    from faster_whisper import WhisperModel
+    path = FW_ALIASES.get(name, name)
+    if name.startswith("NbAiLab/"):                       # NB publiserer CT2-vekter i ct2/
+        from huggingface_hub import snapshot_download
+        path = os.path.join(snapshot_download(name, allow_patterns=["ct2/*"]), "ct2")
+        if not os.path.exists(os.path.join(path, "model.bin")):
+            raise FileNotFoundError(f"{name} har ingen CT2-versjon")
+    try:
+        import ctranslate2
+        cuda = ctranslate2.get_cuda_device_count() > 0
+    except Exception:
+        cuda = False
+    return WhisperModel(path, device="cuda" if cuda else "cpu",
+                        compute_type="float16" if cuda else "int8",
+                        cpu_threads=os.cpu_count() or 4)
+
+
+def fw_detect(model, y, sr=16000):
+    """Språk med faster-whisper: klippene med mest sang, stopper tidlig når den er sikker."""
+    total, n = {}, 0
+    for clip in pick_clips(y, sr):
+        _, _, probs = model.detect_language(audio=clip)
+        n += 1
+        for c, p in probs:
+            total[c] = total.get(c, 0.0) + p
+        best = max(total.values()) / n
+        nordic = sum(total.get(c, 0) for c in NORDIC) / n
+        if max(best, nordic) >= 0.9:                      # sikker nok – spar resten
+            break
+    prob = {c: p / n for c, p in total.items()}
+    nordic = sum(prob.get(c, 0) for c in NORDIC)
+    best = max(prob, key=prob.get)
+    lang = "no" if nordic >= prob[best] else best
+    top = sorted(prob.items(), key=lambda kv: -kv[1])[:3]
+    say("• Språk: " + ", ".join(f"{c} {p:.0%}" for c, p in top) +
+        f" (nordisk {nordic:.0%}, {n} klipp) -> {lang}")
+    return lang
+
+
+def windows(dur):
+    step = WIN - 2 * STRIDE
+    out, t = [], 0.0
+    while True:
+        out.append({"start": round(t, 3), "end": round(min(t + WIN, dur), 3)})
+        if t + WIN >= dur:
+            return out
+        t += step
+
+
+def sung_windows(y, clips, sr=16000):
+    """Dropp vinduer nesten uten sang (intro/mellomspill) – raskere og ingen «hallusinert» tekst.
+    Et vindu beholdes hvis minst 1,5 sek har vokalenergi over 10 % av låtas sterke partier."""
+    import numpy as np
+    hop = sr // 20                                         # 50 ms
+    n = len(y) // hop
+    if n == 0:
+        return clips
+    rms = np.sqrt(np.mean(y[: n * hop].reshape(n, hop) ** 2, axis=1))
+    thr = 0.1 * float(np.percentile(rms, 95))
+    keep = [c for c in clips
+            if (rms[int(c["start"] * 20): int(c["end"] * 20)] > thr).sum() >= 30]
+    return keep or clips
+
+
+def merge_windows(clips, per_clip):
+    """Flett ord fra overlappende vinduer. Hvert ord tilhører vinduet der midtpunktet ligger
+    i vinduets «kjerne» (overlappen deles på midten). Ord rett før kuttet som forrige vindu
+    ikke fikk med, tas også med; står samme ordrekke på begge sider av skjøten, fjernes den doble."""
+    norm = lambda t: re.sub(r"[^\wæøå]", "", t.lower())
+    out = []
+    for k, (c, words) in enumerate(zip(clips, per_clip)):
+        prev = clips[k - 1] if k > 0 else None
+        nxt = clips[k + 1] if k + 1 < len(clips) else None
+        lo = (c["start"] + prev["end"]) / 2 if prev and prev["end"] > c["start"] else -1.0
+        hi = (c["end"] + nxt["start"]) / 2 if nxt and c["end"] > nxt["start"] else float("inf")
+        last = out[-1]["end"] if out else -1.0
+        kept = [w for w in words
+                if (lo <= (w["start"] + w["end"]) / 2 < hi)
+                or (lo - 2.0 <= w["start"] < lo and w["start"] >= last - 0.05)]
+        if out and kept:                                  # dobbel ordrekke over skjøten?
+            for m in range(min(4, len(out), len(kept)), 0, -1):
+                tail, head = out[-m:], kept[:m]
+                if [norm(w["text"]) for w in tail] == [norm(w["text"]) for w in head] and \
+                        abs(head[0]["start"] - tail[0]["start"]) < 1.5:
+                    kept = kept[m:]
+                    break
+        out.extend(kept)
+    return out
+
+
+def transcribe_fast(y, model, lang, beams, sr=16000):
+    """y: 16 kHz mono float32 -> ord med start/slutt. model: navn eller lastet WhisperModel."""
+    import faster_whisper.transcribe as fwt
+    from faster_whisper import BatchedInferencePipeline
+    if isinstance(model, str):
+        name = model
+        model = fw_load(model)
+    else:
+        name = "turbo"
+    dev = model.model.device
+    say(f"• Tekst: {name} på {dev} (CTranslate2), beams={beams}, overlappende biter")
+    # en logglinje i faster-whisper tåler ikke overlappende klipp (negativ «VAD-tid»)
+    if not getattr(fwt, "_akkord_patch", False):
+        orig = fwt.format_timestamp
+        fwt.format_timestamp = lambda t, *a, **k: orig(max(0.0, t), *a, **k)
+        fwt._akkord_patch = True
+    dur = len(y) / sr
+    clips = sung_windows(y, windows(dur), sr)
+    prog = Progress()
+    prog(0)
+    segs = BatchedInferencePipeline(model).transcribe(
+        y, language=lang, task="transcribe", beam_size=beams, batch_size=8,
+        word_timestamps=True, vad_filter=False, clip_timestamps=clips,
+        without_timestamps=False,          # med tidsstempel-tokens avslutter ikke Whisper vinduet for tidlig
+        condition_on_previous_text=False, no_speech_threshold=None,
+        log_prob_threshold=None, compression_ratio_threshold=None)[0]
+    per_clip = [[] for _ in clips]
+    for seg in segs:                                       # generator: én batch om gangen
+        offset = seg.seek / model.frames_per_second           # vinduets start (sek)
+        k = min(range(len(clips)), key=lambda i: abs(clips[i]["start"] - offset))
+        for w in seg.words or []:
+            t = w.word.strip()
+            if t:
+                per_clip[k].append({"start": round(float(w.start), 2),
+                                    "end": round(float(w.end), 2), "text": t})
+        prog(min(seg.end / dur, 0.99))
+    prog(1)
+    for ws in per_clip:
+        ws.sort(key=lambda w: w["start"])
+    return repair_words(merge_windows(clips, per_clip))
 
 # ---------------------------------------------------------------- linjer
 
@@ -522,6 +676,28 @@ def find_chords(audio, cache, redo=False):
     free_memory()
     return segs
 
+def fast_lyrics(y, a, timer):
+    """Språk + tekst med faster-whisper. Gjenbruker turbo-modellen fra språkgjenkjenningen
+    når låta ikke er norsk (da trengs bare én modell)."""
+    lang, det = a.lang, None
+    if lang == "auto":
+        say("• Språk: lytter på klippene med mest sang")
+        det = fw_load(DETECT_MODEL)
+        lang = fw_detect(det, y)
+        say(f"• Bruker språk: {lang}")
+    timer.lap("språk")
+    name = a.model or MODELS.get(lang, OTHER_MODEL)
+    if det is not None and name == DETECT_MODEL:
+        model = det                                       # samme modell – ikke last på nytt
+    else:
+        del det
+        free_memory()
+        model = name
+    words = transcribe_fast(y, model, lang, a.beams or 5)
+    del model
+    free_memory()
+    return words
+
 # ---------------------------------------------------------------- main
 
 def main():
@@ -533,15 +709,17 @@ def main():
                     help="auto (standard), no (bokmål), nn (nynorsk), en, eller annen Whisper-kode")
     ap.add_argument("--beams", type=int, default=None,
                     help="5 = best, 1 = raskest. Standard: 5 på GPU/MPS med ≥15 GB RAM, ellers 1")
+    ap.add_argument("--slow", action="store_true",
+                    help="bruk transformers i stedet for faster-whisper (tregere, samme modeller)")
     ap.add_argument("--sequential", action="store_true",
                     help="Whispers egen lange modus i stedet for 28-sek-biter (krever mye RAM)")
     ap.add_argument("--no-separate", action="store_true", help="hopp over Demucs")
     ap.add_argument("--redo-lyrics", action="store_true", help="transkriber teksten på nytt")
     ap.add_argument("--redo-chords", action="store_true", help="finn akkordene på nytt")
     ap.add_argument("--min-len", type=float, default=0.4)
-    ap.add_argument("--flats", action="store_true")
-    ap.add_argument("--sharps", action="store_true")
-    ap.add_argument("--key", help="skriv {key: ...} i ChordPro")
+    ap.add_argument("--flats", action="store_true", help="alltid b (Db, Eb ...)")
+    ap.add_argument("--sharps", action="store_true", help="alltid # (C#, D# ...)")
+    ap.add_argument("--key", help="overstyr {key: ...} i ChordPro (standard: estimert)")
     ap.add_argument("--quiet", action="store_true", help="ikke skriv ChordPro til stdout")
     a = ap.parse_args()
 
@@ -549,7 +727,6 @@ def main():
     if not os.path.exists(audio):
         sys.exit(f"Fant ikke {audio}")
     base = os.path.splitext(audio)[0]
-    names = FLAT if a.flats else SHARP if a.sharps else MIXED
 
     timer = Timer()
     wfile = base + ".words.json"
@@ -563,11 +740,20 @@ def main():
             timer.lap("vokal")
         say("• Tekst: leser lyd")
         y = load_audio(src, 16000, mono=True)             # dekodes én gang, brukes til begge
-        lang, model = resolve_language(y, a.lang, a.model)
-        timer.lap("språk")
-        # beams=5 gir litt bedre tekst, men er 3–5x tregere på CPU -> bare på GPU/MPS
-        beams = a.beams or (5 if device() != "cpu" and ram_gb() >= 15 else 1)
-        words = transcribe(y, model, lang, beams, not a.sequential)
+        fast = have_fast() and not a.slow and not a.sequential
+        words = None
+        if fast:
+            try:
+                words = fast_lyrics(y, a, timer)
+            except Exception as e:  # noqa: BLE001
+                say(f"! Rask tekstgjenkjenning feilet ({type(e).__name__}: {e}) – bruker transformers")
+                free_memory()
+        if words is None:
+            lang, model = resolve_language(y, a.lang, a.model)
+            timer.lap("språk")
+            # beams=5 gir litt bedre tekst, men er 3–5x tregere på CPU -> bare på GPU/MPS
+            beams = a.beams or (5 if device() != "cpu" and ram_gb() >= 15 else 1)
+            words = transcribe(y, model, lang, beams, not a.sequential)
         del y
         write_json(wfile, words)
         free_memory()
@@ -575,13 +761,16 @@ def main():
 
     # akkorder etter teksten -> de to modellene ligger ikke i minnet samtidig
     raw = find_chords(audio, base + ".chords.raw.json", a.redo_chords)
+    key = estimate_key(raw)                               # staver Db/Gb eller C#/F# etter toneart
+    names = FLAT if a.flats else SHARP if a.sharps else names_for_key(key)
     chords = clean(raw, a.min_len, names)
     timer.lap("akkorder")
     write_json(base + ".chords.json", chords, indent=2)
 
     title, artist = audio_tags(audio)
     title = title or os.path.basename(base)
-    cho = to_chordpro(merge(split_lines(words), chords), title, artist, a.key)
+    cho = to_chordpro(merge(split_lines(words), chords), title, artist,
+                      a.key or (key_name(key, names) if key else None))
     with open(base + ".cho", "w", encoding="utf-8") as f:
         f.write(cho)
     if not a.quiet:

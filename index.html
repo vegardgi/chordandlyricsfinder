@@ -147,6 +147,7 @@
   .sheet .chorus { border-left: 3px solid var(--accent); padding-left: 12px; margin: 6px 0; }
   .sheet .header { margin-bottom: 14px; }
 
+  .timing { color: var(--muted); font-size: 12px; margin: 16px 0 0; }
   textarea.editor {
     width: 100%; min-height: 380px; resize: vertical; padding: 12px; border-radius: 8px;
     border: 1px solid var(--line); background: var(--bg); color: var(--text);
@@ -424,7 +425,8 @@ function bodyFor(j, state) {
         <button class="danger del" type="button">Slett</button>
       </div>
       ${retryRow(j, state)}
-      <div class="sheet">${renderChordPro(j.cho || "")}</div>`;
+      <div class="sheet">${renderChordPro(j.cho || "")}</div>
+      ${j.timing ? `<p class="timing">Tid: ${esc(j.timing)}</p>` : ""}`;
     $(".copy", body).onclick = async () => toast(await copyText(j.cho || "") ? "Kopiert" : "Kunne ikke kopiere");
     $(".edit", body).onclick = () => { state.editing = true; update(j, true); };
   } else if (j.status === "error" || j.status === "cancelled") {
@@ -486,7 +488,7 @@ function update(j, force = false) {
   const show = (j.status === "done" && expanded.has(j.id)) || j.status === "error" || j.status === "cancelled";
   if (!show) { body.hidden = true; body.innerHTML = ""; state.renderedKey = null; return; }
   if (state.editing && !force) return;              // ikke rør teksten mens du redigerer
-  const key = [j.status, j.cho, j.error, j.log, state.editing, state.retryOpen, j.lang, j.separate].join("\u0001");
+  const key = [j.status, j.cho, j.error, j.log, j.timing, state.editing, state.retryOpen, j.lang, j.separate].join("\u0001");
   if (key === state.renderedKey && !force) return;
   state.renderedKey = key;
   body.hidden = false;

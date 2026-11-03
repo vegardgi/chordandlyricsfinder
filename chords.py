@@ -53,6 +53,63 @@ def harte_to_display(label, names=MIXED):
     return disp
 
 
+# Krumhansl–Kessler-profiler for dur og moll
+_MAJ = [6.35, 2.23, 3.48, 2.33, 4.38, 4.09, 2.52, 5.19, 2.39, 3.66, 2.29, 2.88]
+_MIN = [6.33, 2.68, 3.52, 5.38, 2.60, 3.53, 2.54, 4.75, 3.98, 2.69, 3.34, 3.17]
+SHARP_KEYS = "C C# D D# E F F# G G# A Bb B".split()   # dur-tonearter med #: G D A E B F#
+FLAT_MAJORS = {5, 10, 3, 8, 1}                          # F Bb Eb Ab Db
+SHARP_MAJORS = {7, 2, 9, 4, 11, 6}                      # G D A E B F#
+
+
+def estimate_key(segs):
+    """Rå lv-chordia-segmenter -> (tonika 0–11, 'maj'/'min'), eller None."""
+    w = [0.0] * 12
+    for s in segs:
+        lab = s["chord"]
+        if lab in ("N", "X", ""):
+            continue
+        root_part = lab.partition("/")[0]
+        root, _, qual = root_part.partition(":")
+        if root not in PC:
+            continue
+        r, qual = PC[root], qual or "maj"
+        third = 3 if qual.startswith(("min", "dim", "hdim")) else 4
+        fifth = 6 if qual.startswith(("dim", "hdim")) else 8 if qual.startswith("aug") else 7
+        d = float(s["end_time"]) - float(s["start_time"])
+        for iv, f in ((0, 1.0), (third, 0.8), (fifth, 0.8)):
+            w[(r + iv) % 12] += d * f
+    if sum(w) == 0:
+        return None
+
+    def corr(prof, t):
+        x = [w[(t + i) % 12] for i in range(12)]
+        mx, mp = sum(x) / 12, sum(prof) / 12
+        num = sum((a - mx) * (b - mp) for a, b in zip(x, prof))
+        den = (sum((a - mx) ** 2 for a in x) * sum((b - mp) ** 2 for b in prof)) ** 0.5
+        return num / den if den else 0
+    best = max([(corr(_MAJ, t), t, "maj") for t in range(12)] +
+               [(corr(_MIN, t), t, "min") for t in range(12)])
+    return best[1], best[2]
+
+
+def names_for_key(key):
+    """Navneliste (C, Db/C# ...) som passer tonearten. Moll bruker parallell dur-forteikning."""
+    if key is None:
+        return MIXED
+    tonic, mode = key
+    major = tonic if mode == "maj" else (tonic + 3) % 12
+    if major in FLAT_MAJORS:
+        return FLAT
+    if major in SHARP_MAJORS:
+        return SHARP_KEYS
+    return MIXED
+
+
+def key_name(key, names):
+    tonic, mode = key
+    return names[tonic] + ("m" if mode == "min" else "")
+
+
 def recognize(path, chord_dict="full"):
     from lv_chordia.chord_recognition import chord_recognition
     return chord_recognition(audio_path=os.path.abspath(path), chord_dict_name=chord_dict)
