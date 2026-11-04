@@ -1,33 +1,48 @@
 #!/usr/bin/env python3
-"""Akkordverktøy – lokal dropzone-app.
+"""Akkordverktøy – dropzone-app, lokalt eller på nett.
 
-Start:  python app.py   (eller dobbeltklikk Start.command / start.bat)
-Åpner http://localhost:8765 i nettleseren. Alt kjører lokalt.
+Lokalt:  python app.py   (eller dobbeltklikk Start.command / start.bat)
+         Åpner http://localhost:8765. Alt kjører på maskinen, ferdige filer i ferdige/.
+Nett:    AKKORD_ONLINE=1 (settes av modal_app.py). Ingen brukere og ingen lagring:
+         hver nettleserfane er en anonym økt som bare ser sine egne låter, og alt slettes
+         når siden lukkes (senest etter SESSION_TTL uten aktivitet).
 
-Én jobb kjøres om gangen (modellene er store). Hver jobb kjører songsheet.py som en
-egen prosess, så minnet frigjøres helt mellom låtene og en jobb kan avbrytes.
+Én jobb kjøres om gangen lokalt (modellene er store). Hver jobb kjører songsheet.py som en
+egen prosess, så minnet frigjøres helt mellom låtene og en jobb kan avbrytes. På nett byttes
+RUNNER ut med en som sender jobben til en GPU (se modal_app.py).
 """
 import atexit, json, os, queue, re, shutil, socket, subprocess, sys, threading, time, uuid
 import urllib.request, webbrowser
 
-from fastapi import Body, FastAPI, File, Form, HTTPException, UploadFile
+from fastapi import Body, FastAPI, File, Form, HTTPException, Request, UploadFile
 from fastapi.responses import FileResponse, HTMLResponse, PlainTextResponse
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-JOBS_DIR = os.path.join(HERE, "jobber")
+ONLINE = os.environ.get("AKKORD_ONLINE") == "1"
+JOBS_DIR = os.environ.get("AKKORD_JOBS_DIR") or os.path.join(HERE, "jobber")
 OUT_DIR = os.path.join(HERE, "ferdige")
+SESSION_TTL = int(os.environ.get("AKKORD_SESSION_TTL", 15 * 60))   # sek uten aktivitet -> slett
+LEAVE_GRACE = 20               # sek etter «lukket siden» før sletting (dekker omlasting)
+MAX_MB = int(os.environ.get("AKKORD_MAX_MB", 60))
+MAX_ACTIVE = int(os.environ.get("AKKORD_MAX_ACTIVE", 3))           # låter i kø per økt
+WORKERS = int(os.environ.get("AKKORD_WORKERS", 1))                 # samtidige jobber (GPU på nett)
+SESSION_RE = re.compile(r"^[A-Za-z0-9-]{16,64}$")
 PORT = int(os.environ.get("AKKORD_PORT", 8765))
 AUDIO_EXT = {".mp3", ".wav", ".m4a", ".flac", ".ogg", ".aac", ".aiff", ".aif", ".opus"}
 LANGS = {"auto", "no", "nn", "en"}
 META_KEYS = ("id", "name", "audio", "lang", "separate", "status", "stage", "progress",
              "error", "created", "started", "finished", "lang_used", "timing")
 
+if ONLINE:                                  # ingenting overlever en omstart
+    shutil.rmtree(JOBS_DIR, ignore_errors=True)
 os.makedirs(JOBS_DIR, exist_ok=True)
-os.makedirs(OUT_DIR, exist_ok=True)
+if not ONLINE:
+    os.makedirs(OUT_DIR, exist_ok=True)
 
 app = FastAPI(title="Akkordverktøy")
 jobs = {}            # id -> dict
 order = []           # eldste først
+sessions = {}        # økt-id -> {"seen": tid, "leaving": tid | None}  (bare på nett)
 work = queue.Queue()
 lock = threading.RLock()
 
@@ -71,6 +86,8 @@ def out_base(j):
 
 
 def save_meta(j):
+    if ONLINE:                                 # ingen jobb.json på nett – ingenting skal overleve
+        return
     try:
         with open(os.path.join(job_dir(j["id"]), "jobb.json"), "w", encoding="utf-8") as f:
             json.dump({k: j.get(k) for k in META_KEYS}, f, ensure_ascii=False, indent=1)
@@ -101,6 +118,9 @@ def public(j):
     d["cho"] = j.get("cho")
     if j.get("status") in ("error", "cancelled"):
         d["log"] = j.get("log") or ""
+    if j.get("status") == "queued":           # plass i den felles køen
+        d["ahead"] = sum(1 for i in order if jobs.get(i, {}).get("status") in ("queued", "running")
+                         and jobs[i]["created"] < j["created"])
     return d
 
 
@@ -206,6 +226,11 @@ class Tracker:
 
 
 def run_job(jid):
+    RUNNER(jid)
+
+
+def run_job_local(jid):
+    """Kjør songsheet.py som egen prosess på denne maskinen."""
     with lock:
         j = jobs[jid]
         j.update(status="running", stage="Starter", progress=0.01, detail="", error=None,
@@ -263,16 +288,20 @@ def run_job(jid):
     if p.returncode == 0 and os.path.exists(cho_path):
         with open(cho_path, encoding="utf-8") as f:
             cho = f.read()
-        try:
-            shutil.copyfile(cho_path, os.path.join(OUT_DIR, j["name"] + ".cho"))
-        except OSError:
-            pass
+        if not ONLINE:
+            try:
+                shutil.copyfile(cho_path, os.path.join(OUT_DIR, j["name"] + ".cho"))
+            except OSError:
+                pass
         set_job(jid, status="done", stage="Ferdig", progress=1.0, cho=cho, detail="",
                 finished=time.time(), persist=True)
     else:
         tail = log_tail(j)
         set_job(jid, status="error", stage="Feilet", error=friendly_error(p.returncode, tail),
                 log=tail, finished=time.time(), persist=True)
+
+
+RUNNER = run_job_local        # modal_app.py bytter til en GPU-kjører
 
 
 def worker():
@@ -291,6 +320,11 @@ def worker():
 
 
 def kill(j):
+    if j.get("remote_cancel"):                     # jobb som kjører på Modal
+        try:
+            j["remote_cancel"]()
+        except Exception:  # noqa: BLE001
+            pass
     p = j.get("proc")
     if p and p.poll() is None:
         try:
@@ -336,35 +370,103 @@ def load_existing():
         order.append(jid)
 
 
-load_existing()
-threading.Thread(target=worker, daemon=True).start()
+def delete_job(jid):
+    with lock:
+        j = jobs.pop(jid, None)
+        if jid in order:
+            order.remove(jid)
+    if j is None:
+        return
+    j["status"] = "cancelled"
+    kill(j)                                        # må være stoppet før mappa kan slettes
+    shutil.rmtree(job_dir(jid), ignore_errors=True)
+
+
+def sweeper():
+    """På nett: slett økter som har lukket siden eller ikke har vært aktive på en stund."""
+    while True:
+        time.sleep(5)
+        now = time.time()
+        with lock:
+            dead = [sid for sid, s in sessions.items()
+                    if (s["leaving"] and now - s["leaving"] > LEAVE_GRACE)
+                    or now - s["seen"] > SESSION_TTL]
+            victims = [jid for jid, j in jobs.items() if j.get("session") in dead]
+            for sid in dead:
+                sessions.pop(sid, None)
+        for jid in victims:
+            delete_job(jid)
+
+
+if not ONLINE:
+    load_existing()
+for _ in range(max(1, WORKERS)):
+    threading.Thread(target=worker, daemon=True).start()
+if ONLINE:
+    threading.Thread(target=sweeper, daemon=True).start()
 
 # ------------------------------------------------------------------ API
 
 
+def page(name):
+    with open(os.path.join(HERE, name), encoding="utf-8") as f:
+        html = f.read()
+    mode = "online" if ONLINE else "local"
+    html = html.replace("<html lang=\"no\">", f"<html lang=\"no\" data-mode=\"{mode}\">", 1)
+    return HTMLResponse(html, headers={"Cache-Control": "no-store"})
+
+
 @app.get("/", response_class=HTMLResponse)
 def index():
-    with open(os.path.join(HERE, "index.html"), encoding="utf-8") as f:
-        return HTMLResponse(f.read(), headers={"Cache-Control": "no-store"})
+    return page("index.html")
 
 
 @app.get("/vilkar", response_class=HTMLResponse)
 def terms():
-    with open(os.path.join(HERE, "vilkar.html"), encoding="utf-8") as f:
-        return HTMLResponse(f.read())
+    return page("vilkar.html")
+
+
+def session_of(request: Request):
+    """Lokalt: alle deler én økt. På nett: anonym økt-id fra nettleserfanen."""
+    if not ONLINE:
+        return "local"
+    sid = request.headers.get("x-akkord-session") or request.query_params.get("s") or ""
+    if not SESSION_RE.match(sid):
+        raise HTTPException(400, "Mangler økt – last siden på nytt")
+    with lock:
+        s = sessions.setdefault(sid, {"seen": 0, "leaving": None})
+        s["seen"], s["leaving"] = time.time(), None
+    return sid
+
+
+@app.post("/api/leave")
+async def leave(request: Request):
+    """Siden lukkes (sendBeacon). Slett øktens filer etter en kort frist (omlasting)."""
+    sid = request.query_params.get("s", "")
+    with lock:
+        if sid in sessions:
+            sessions[sid]["leaving"] = time.time()
+    return {"ok": True}
 
 
 @app.post("/api/jobs")
-async def create_job(file: UploadFile = File(...), lang: str = Form("auto"),
+async def create_job(request: Request, file: UploadFile = File(...), lang: str = Form("auto"),
                      separate: bool = Form(True)):
+    sid = session_of(request)
     name, ext = safe_name(file.filename)
     if ext not in AUDIO_EXT:
         raise HTTPException(400, f"Ukjent filtype «{ext or 'ingen'}». Bruk mp3, wav, m4a, flac, ogg eller aiff.")
     if lang not in LANGS:
         lang = "auto"
+    if ONLINE:
+        with lock:
+            active = sum(1 for j in jobs.values() if j.get("session") == sid
+                         and j["status"] in ("queued", "running"))
+        if active >= MAX_ACTIVE:
+            raise HTTPException(429, f"Maks {MAX_ACTIVE} låter i kø om gangen – vent til en er ferdig.")
     jid = time.strftime("%Y%m%d-%H%M%S-") + uuid.uuid4().hex[:6]
     os.makedirs(job_dir(jid))
-    j = {"id": jid, "name": name, "audio": name + ext, "lang": lang, "separate": separate,
+    j = {"id": jid, "session": sid, "name": name, "audio": name + ext, "lang": lang, "separate": separate,
          "status": "queued", "stage": "I kø", "progress": 0.0, "error": None,
          "created": time.time(), "started": None, "finished": None, "lang_used": None}
     size = 0
@@ -372,9 +474,12 @@ async def create_job(file: UploadFile = File(...), lang: str = Form("auto"),
         while chunk := await file.read(1 << 20):
             f.write(chunk)
             size += len(chunk)
-    if size == 0:
+            if ONLINE and size > MAX_MB << 20:
+                break
+    if size == 0 or (ONLINE and size > MAX_MB << 20):
         shutil.rmtree(job_dir(jid), ignore_errors=True)
-        raise HTTPException(400, "Fila er tom.")
+        raise HTTPException(413 if size else 400,
+                            f"Fila er større enn {MAX_MB} MB." if size else "Fila er tom.")
     save_meta(j)
     with lock:
         jobs[jid] = j
@@ -384,21 +489,24 @@ async def create_job(file: UploadFile = File(...), lang: str = Form("auto"),
 
 
 @app.get("/api/jobs")
-def list_jobs():
+def list_jobs(request: Request):
+    sid = session_of(request)
     with lock:
-        return [public(jobs[i]) for i in reversed(order) if i in jobs]
+        return [public(jobs[i]) for i in reversed(order)
+                if i in jobs and jobs[i].get("session", "local") == sid]
 
 
-def get_job(jid):
+def get_job(jid, request: Request):
+    sid = session_of(request)
     j = jobs.get(jid)
-    if not j:
+    if not j or j.get("session", "local") != sid:
         raise HTTPException(404, "Fant ikke jobben")
     return j
 
 
 @app.put("/api/jobs/{jid}/cho")
-def save_cho(jid: str, body: dict = Body(...)):
-    j = get_job(jid)
+def save_cho(jid: str, request: Request, body: dict = Body(...)):
+    j = get_job(jid, request)
     if j["status"] != "done":
         raise HTTPException(409, "Jobben er ikke ferdig")
     text = str(body.get("cho", ""))
@@ -407,14 +515,15 @@ def save_cho(jid: str, body: dict = Body(...)):
     path = out_base(j) + ".cho"
     with open(path, "w", encoding="utf-8") as f:
         f.write(text)
-    shutil.copyfile(path, os.path.join(OUT_DIR, j["name"] + ".cho"))
+    if not ONLINE:
+        shutil.copyfile(path, os.path.join(OUT_DIR, j["name"] + ".cho"))
     set_job(jid, cho=text)
     return {"ok": True}
 
 
 @app.get("/api/jobs/{jid}/cho")
-def download_cho(jid: str):
-    j = get_job(jid)
+def download_cho(jid: str, request: Request):
+    j = get_job(jid, request)
     path = out_base(j) + ".cho"
     if not os.path.exists(path):
         raise HTTPException(404, "Ingen ChordPro-fil ennå")
@@ -422,11 +531,11 @@ def download_cho(jid: str):
 
 
 @app.post("/api/jobs/{jid}/retry")
-def retry(jid: str, body: dict | None = Body(None)):
+def retry(jid: str, request: Request, body: dict | None = Body(None)):
     """Kjør på nytt med (ev. nye) valg. Teksten gjenkjennes på nytt; akkorder og
     utskilt vokal gjenbrukes fra forrige runde når det er mulig."""
     with lock:
-        j = get_job(jid)
+        j = get_job(jid, request)
         if j["status"] in ("queued", "running"):
             raise HTTPException(409, "Jobben kjører allerede")
         body = body or {}
@@ -441,7 +550,7 @@ def retry(jid: str, body: dict | None = Body(None)):
             except OSError:
                 pass
         j.update(status="queued", stage="I kø", progress=0.0, error=None, cho=None, log=None,
-                 detail="", started=None, finished=None, lang_used=None)
+                 detail="", started=None, finished=None, lang_used=None, created=time.time())
         save_meta(j)
         order.remove(jid)
         order.append(jid)                          # øverst i lista igjen
@@ -450,9 +559,9 @@ def retry(jid: str, body: dict | None = Body(None)):
 
 
 @app.post("/api/jobs/{jid}/cancel")
-def cancel(jid: str):
+def cancel(jid: str, request: Request):
     with lock:
-        j = get_job(jid)
+        j = get_job(jid, request)
         if j["status"] not in ("queued", "running"):
             return public(j)
         j.update(status="cancelled", stage="Avbrutt", error=None, finished=time.time())
@@ -462,20 +571,16 @@ def cancel(jid: str):
 
 
 @app.delete("/api/jobs/{jid}")
-def delete(jid: str):
-    with lock:
-        j = get_job(jid)
-        j["status"] = "cancelled"
-        jobs.pop(jid, None)
-        if jid in order:
-            order.remove(jid)
-    kill(j)                                        # må være stoppet før mappa kan slettes
-    shutil.rmtree(job_dir(jid), ignore_errors=True)
+def delete(jid: str, request: Request):
+    get_job(jid, request)
+    delete_job(jid)
     return {"ok": True}
 
 
 @app.post("/api/open-folder")
 def open_folder():
+    if ONLINE:
+        raise HTTPException(404, "Ikke tilgjengelig på nett")
     try:
         if sys.platform == "darwin":
             subprocess.Popen(["open", OUT_DIR])

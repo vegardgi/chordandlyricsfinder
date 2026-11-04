@@ -40,6 +40,9 @@
   }
   * { box-sizing: border-box; }
   [hidden] { display: none !important; }
+  html[data-mode="online"] .local-only, html:not([data-mode="online"]) .online-only { display: none !important; }
+  .notice { margin: 14px 0 0; padding: 10px 14px; border-radius: 10px; background: var(--accent-soft);
+            font-size: 14px; color: var(--text); }
   html, body { margin: 0; background: var(--bg); color: var(--text); }
   body {
     font: 15px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, Roboto, sans-serif;
@@ -186,7 +189,7 @@
 <main>
   <header>
     <h1>Akkordverktøy <small>Lydfil inn → ChordPro med tekst og akkorder</small></h1>
-    <button id="open-folder" type="button" title="Åpner mappa «ferdige» der alle .cho-filer lagres">
+    <button id="open-folder" class="local-only" type="button" title="Åpner mappa «ferdige» der alle .cho-filer lagres">
       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>
       Åpne mappe med ferdige filer
     </button>
@@ -211,10 +214,13 @@
     <input type="file" id="file" class="sr" multiple accept="audio/*,.mp3,.wav,.m4a,.flac,.ogg,.aac,.aiff,.aif,.opus">
   </div>
 
+  <p class="notice online-only">Ingenting lagres: lydfila og akkordarket slettes når du lukker siden.
+    Kopier eller last ned resultatet før du går.</p>
   <div id="banner"></div>
   <section id="jobs" aria-live="polite"></section>
   <footer>
-    <p>Alt kjører lokalt på maskinen din. Første låt tar lengre tid fordi modellene lastes ned.</p>
+    <p class="local-only">Alt kjører lokalt på maskinen din. Første låt tar lengre tid fordi modellene lastes ned.</p>
+    <p class="online-only">Ingen konto, ingen lagring. Alt slettes når du lukker siden.</p>
     <p>Sangtekster og melodier er vernet av opphavsrett – bruk resultatet til egen øving.
        <a href="/vilkar">Vilkår, opphavsrett og personvern</a></p>
   </footer>
@@ -248,8 +254,22 @@ function toast(msg) {
   t.textContent = msg; t.classList.add("show");
   clearTimeout(toastTimer); toastTimer = setTimeout(() => t.classList.remove("show"), 2600);
 }
+// Økt: én anonym id per fane (overlever omlasting, ikke lukking). Brukes bare på nett.
+const ONLINE = document.documentElement.dataset.mode === "online";
+let SESSION = "";
+try { SESSION = sessionStorage.getItem("akkord-session") || ""; } catch (e) {}
+if (!/^[A-Za-z0-9-]{16,64}$/.test(SESSION)) {
+  SESSION = (crypto.randomUUID ? crypto.randomUUID() : Array.from(crypto.getRandomValues(new Uint8Array(16)), b => b.toString(16).padStart(2, "0")).join(""));
+  try { sessionStorage.setItem("akkord-session", SESSION); } catch (e) {}
+}
+const withSession = url => ONLINE ? url + (url.includes("?") ? "&" : "?") + "s=" + encodeURIComponent(SESSION) : url;
+if (ONLINE) {
+  // Lukker du siden, slettes alt (serveren venter 20 s i tilfelle det bare var en omlasting)
+  window.addEventListener("pagehide", () => navigator.sendBeacon(withSession("/api/leave")));
+}
+
 async function api(method, url, body) {
-  const opt = { method, headers: {} };
+  const opt = { method, headers: ONLINE ? { "X-Akkord-Session": SESSION } : {} };
   if (body instanceof FormData) opt.body = body;
   else if (body !== undefined) { opt.body = JSON.stringify(body); opt.headers["Content-Type"] = "application/json"; }
   const r = await fetch(url, opt);
@@ -421,7 +441,7 @@ let lastData = [], serverOk = true;
 
 function statusLine(j) {
   const opts = `${LANGS[j.lang] || j.lang}${j.separate ? " · vokalseparasjon" : ""}`;
-  if (j.status === "queued") return `I kø · ${opts}`;
+  if (j.status === "queued") return `I kø${j.ahead ? ` (${j.ahead} foran deg)` : ""} · ${opts}`;
   if (j.status === "running") return `${j.stage}${j.detail ? " – " + j.detail : ""}`;
   if (j.status === "done") {
     const used = j.lang_used ? (LANGS[j.lang_used] || j.lang_used) : (LANGS[j.lang] || j.lang);
@@ -503,7 +523,7 @@ function bodyFor(j, state) {
       <div class="actions">
         <button class="primary copy-cho" type="button" title="ChordPro: [Akkord] rett foran ordet – for OnSong, songbook-apper o.l.">Kopier ChordPro</button>
         <button class="primary copy-plain" type="button" title="Akkordlinje over tekstlinje – for melding, e-post, Word">Kopier akkord over tekst</button>
-        <a class="btn" href="/api/jobs/${j.id}/cho" download>Last ned .cho</a>
+        <a class="btn" href="${withSession(`/api/jobs/${j.id}/cho`)}" download>Last ned .cho</a>
         <button class="edit" type="button">Rediger</button>
         <span class="spacer"></span>
         <button class="retry" type="button">Kjør på nytt …</button>
@@ -544,7 +564,8 @@ function bodyFor(j, state) {
   }
   const del = $(".del", body);
   if (del) del.onclick = async () => {
-    if (!confirm(`Slette «${j.name}»? Lydfila og resultatet i jobbmappa fjernes (kopien i «ferdige» blir liggende).`)) return;
+    if (!confirm(ONLINE ? `Slette «${j.name}»? Lydfila og akkordarket fjernes fra serveren nå.`
+        : `Slette «${j.name}»? Lydfila og resultatet i jobbmappa fjernes (kopien i «ferdige» blir liggende).`)) return;
     try { await api("DELETE", `/api/jobs/${j.id}`); poll(true); } catch (e) { toast(e.message); }
   };
   const rb = $(".retry", body);
@@ -633,7 +654,8 @@ async function poll(now = false) {
   } catch (e) {
     serverOk = false;
     const b = $("#banner");
-    b.textContent = "Får ikke kontakt med Akkordverktøy. Er programmet lukket? Start det igjen med Start.command / start.bat.";
+    b.textContent = ONLINE ? "Mistet forbindelsen til serveren. Prøver igjen …"
+      : "Får ikke kontakt med Akkordverktøy. Er programmet lukket? Start det igjen med Start.command / start.bat.";
     b.classList.add("show");
   } finally {
     polling = false;

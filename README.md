@@ -41,6 +41,37 @@ Lukk terminalvinduet for å stoppe appen. Starter du den når den allerede kjør
 Første låt laster i tillegg ned modellene: Whisper turbo ~1,6 GB (språkgjenkjenning og engelsk
 tekst), NB-Whisper medium ~3 GB (norsk tekst), Demucs ~80 MB, akkordmodellen følger med pakken.
 
+## På nett (Modal)
+
+Samme app kan ligge på nett via [Modal](https://modal.com): siden og køen kjører på en liten
+CPU-container, og analysen på en GPU som bare koster noe mens den jobber (per sekund, skalerer til null).
+
+**Ingen brukere, ingen lagring.** Hver nettleserfane er en anonym økt som bare ser sine egne låter.
+Lukker du siden, slettes lydfila og akkordarket etter 20 sekunder, og alt slettes uansett etter
+15 minutter uten aktivitet. Man laster opp, kopierer og er ferdig. Modellene er det eneste som
+lagres (i Modal-volumet `akkord-models`).
+
+```bash
+pip install modal
+modal setup                                   # logg inn (én gang)
+modal run modal_app.py::download_models       # legg modellene i volumet (én gang, ~5 GB)
+modal serve modal_app.py                      # test på en midlertidig URL
+modal deploy modal_app.py                     # publiser – Modal skriver ut adressen
+```
+
+Innstillinger (miljøvariabler når du kjører `modal deploy`):
+
+| Variabel | Standard | Betydning |
+|---|---|---|
+| `AKKORD_GPU` | `L4` | GPU-type (`T4` er billigere og tregere) |
+| `AKKORD_GPU_MAX` | `3` | maks samtidige GPU-er = kostnadstak |
+| `AKKORD_MAX_MB` | `60` | maks filstørrelse |
+| `AKKORD_MAX_ACTIVE` | `3` | maks låter i kø per fane |
+| `AKKORD_SESSION_TTL` | `900` | sekunder uten aktivitet før alt slettes |
+
+Nettmodus kan også testes lokalt uten Modal: `AKKORD_ONLINE=1 python app.py` (analysen kjører
+da på maskinen din).
+
 ## Kommandolinje
 
 ```bash

@@ -15,6 +15,7 @@
             --accent: #7cc4b2; --accent-soft: #23332e; color-scheme: dark; }
   }
   * { box-sizing: border-box; }
+  html[data-mode="online"] .local-only, html:not([data-mode="online"]) .online-only { display: none !important; }
   html, body { margin: 0; background: var(--bg); color: var(--text); }
   body { font: 16px/1.6 -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, Roboto, sans-serif; -webkit-font-smoothing: antialiased; }
   main { max-width: 720px; margin: 0 auto; padding: 32px 20px 80px; }
@@ -85,13 +86,31 @@
   </ul>
 
   <h2>4. Personvern og lagring</h2>
-  <p>Akkordverktøy kjører på din egen maskin. Lydfilene og resultatene sendes ikke til noen tjeneste
-    på nettet. De lagres i programmets mapper: <code>jobber/</code> for lydfil, mellomresultater og logg,
-    og <code>ferdige/</code> for ferdige .cho-filer. Filene ligger der til du sletter dem. «Slett» i appen
-    fjerner jobbmappa, mens kopien i <code>ferdige/</code> blir liggende.</p>
-  <p>Internett brukes bare til å laste ned modellene første gang (fra Hugging Face og Meta) og til å
-    installere programvare. Appen samler ikke inn statistikk og bruker ikke informasjonskapsler (cookies).
-    Valgene dine (språk, vokalseparasjon og visning) lagres bare i nettleseren din.</p>
+  <div class="online-only">
+    <p><strong>Ingen konto, ingen lagring.</strong> Du trenger ikke logge inn, og vi vet ikke hvem du er.</p>
+    <ul>
+      <li>Lydfila du laster opp, sendes til serveren og behandles der. Både lydfila, mellomresultater og
+        akkordarket slettes når du lukker siden. Har du ikke vært aktiv på 15 minutter, slettes alt
+        uansett. Starter serveren på nytt, slettes alt.</li>
+      <li>Ingen andre kan se låtene dine. Hver fane får en tilfeldig, anonym økt-id som bare finnes i
+        nettleseren din til du lukker fanen.</li>
+      <li>Vi bruker ikke informasjonskapsler (cookies) til sporing, og vi samler ikke inn statistikk.
+        Valgene dine (språk, vokalseparasjon og visning) lagres bare i nettleseren din.</li>
+      <li>Behandlingen skjer hos skyleverandøren <a href="https://modal.com/">Modal</a> (databehandler).
+        Den vanlige tekniske loggføringen hos leverandøren kan inneholde IP-adresse og tidspunkt.
+        Den inneholder ikke lydfiler eller akkordark.</li>
+    </ul>
+    <p>Kopier eller last ned akkordarket før du lukker siden. Vi kan ikke hente det fram igjen.</p>
+  </div>
+  <div class="local-only">
+    <p>Akkordverktøy kjører på din egen maskin. Lydfilene og resultatene sendes ikke til noen tjeneste
+      på nettet. De lagres i programmets mapper: <code>jobber/</code> for lydfil, mellomresultater og logg,
+      og <code>ferdige/</code> for ferdige .cho-filer. Filene ligger der til du sletter dem. «Slett» i appen
+      fjerner jobbmappa, mens kopien i <code>ferdige/</code> blir liggende.</p>
+    <p>Internett brukes bare til å laste ned modellene første gang (fra Hugging Face og Meta) og til å
+      installere programvare. Appen samler ikke inn statistikk og bruker ikke informasjonskapsler (cookies).
+      Valgene dine (språk, vokalseparasjon og visning) lagres bare i nettleseren din.</p>
+  </div>
 
   <h2>5. Ingen garanti</h2>
   <p>Tjenesten leveres «som den er», uten garanti for at resultatet er riktig, fullstendig eller egnet
