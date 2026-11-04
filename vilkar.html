@@ -1,0 +1,119 @@
+<!doctype html>
+<html lang="no">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Vilkår og opphavsrett – Akkordverktøy</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🎸</text></svg>">
+<style>
+  :root {
+    --bg: #f6f5f1; --card: #ffffff; --text: #22231f; --muted: #6d6e66; --line: #e3e1da;
+    --accent: #2f6f62; --accent-soft: #e2efeb; color-scheme: light;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg: #161715; --card: #1f201d; --text: #e9e8e2; --muted: #9a9b92; --line: #33342f;
+            --accent: #7cc4b2; --accent-soft: #23332e; color-scheme: dark; }
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; background: var(--bg); color: var(--text); }
+  body { font: 16px/1.6 -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, Roboto, sans-serif; -webkit-font-smoothing: antialiased; }
+  main { max-width: 720px; margin: 0 auto; padding: 32px 20px 80px; }
+  a { color: var(--accent); }
+  .back { font-size: 14px; text-decoration: none; }
+  h1 { font-size: 26px; letter-spacing: -.01em; margin: 18px 0 4px; }
+  .updated { color: var(--muted); font-size: 14px; margin: 0 0 28px; }
+  h2 { font-size: 18px; margin: 32px 0 8px; }
+  p, li { margin: 0 0 10px; }
+  ul { padding-left: 22px; margin: 0 0 10px; }
+  .box { background: var(--accent-soft); border-radius: 12px; padding: 14px 18px; margin: 0 0 24px; }
+  .box p:last-child { margin: 0; }
+  table { border-collapse: collapse; width: 100%; font-size: 14px; margin: 6px 0 10px; }
+  th, td { text-align: left; padding: 7px 8px; border-bottom: 1px solid var(--line); vertical-align: top; }
+  th { color: var(--muted); font-weight: 600; }
+  footer { margin-top: 40px; color: var(--muted); font-size: 13px; }
+</style>
+</head>
+<body>
+<main>
+  <a class="back" href="/">← Tilbake til Akkordverktøy</a>
+  <h1>Vilkår, opphavsrett og personvern</h1>
+  <p class="updated">Sist oppdatert 4. november 2026</p>
+
+  <div class="box">
+    <p><strong>Kort fortalt:</strong> Akkordverktøy lager et utkast til akkordark fra en lydfil du selv har.
+      Utkastet kan inneholde feil. Sangtekster og musikk tilhører opphavspersonene. Bruk resultatet til
+      din egen øving, og ikke publiser eller del det uten tillatelse.</p>
+  </div>
+
+  <h2>1. Hva tjenesten gjør</h2>
+  <p>Akkordverktøy analyserer en lydfil med maskinlæringsmodeller og lager et akkordark i
+    ChordPro-format. Først skilles vokalen ut, så gjenkjennes teksten og akkordene, og til slutt settes
+    akkordene over ordene. Alt er automatisk generert og ikke kontrollert av et menneske.</p>
+  <ul>
+    <li>Teksten kan være feilhørt, mangle linjer eller inneholde ord som ikke synges.</li>
+    <li>Akkorder, toneart og plassering kan være feil, særlig korte gjennomgangsakkorder.</li>
+    <li>Sjekk alltid resultatet på øret før du bruker det.</li>
+  </ul>
+
+  <h2>2. Opphavsrett</h2>
+  <p>Sangtekster, melodier og arrangementer er normalt vernet av <strong>åndsverkloven</strong>.
+    Vernet varer som hovedregel til 70 år etter at opphavspersonen døde. Det gjelder også
+    akkordark du lager selv ut fra en innspilling. De gjengir verket, og du blir ikke eier av sangen
+    ved å skrive den ned.</p>
+  <p><strong>Dette er som regel greit:</strong></p>
+  <ul>
+    <li>å lage et akkordark til <strong>privat bruk</strong> for deg selv og din nærmeste krets,
+      for eksempel for å lære deg eller øve på en sang (åndsverkloven § 26)</li>
+    <li>å bruke sanger som ikke lenger er vernet, eller som du selv har rettighetene til</li>
+  </ul>
+  <p><strong>Dette krever tillatelse eller lisens:</strong></p>
+  <ul>
+    <li>å publisere akkordark eller sangtekster på nett, i sosiale medier eller i en app andre kan bruke</li>
+    <li>å trykke, selge eller dele ut sangbøker, notehefter eller kopier</li>
+    <li>å vise tekst på storskjerm eller dele kopier i en menighet, et kor, et band eller en skole.
+      Mange menigheter har lisens for dette gjennom <a href="https://ccli.com/">CCLI</a>.</li>
+    <li>offentlig framføring av musikk. Det håndteres normalt av <a href="https://www.tono.no/">TONO</a>.</li>
+  </ul>
+  <p>Er du usikker, ta kontakt med rettighetshaveren (forlag eller låtskriver), CCLI eller TONO.</p>
+
+  <h2>3. Ditt ansvar</h2>
+  <ul>
+    <li>Du laster bare opp lydfiler du har lovlig tilgang til.</li>
+    <li>Du er selv ansvarlig for hvordan du bruker resultatet, og for at bruken er i tråd med
+      opphavsretten. Se punkt 2.</li>
+    <li>Ikke bruk tjenesten til å lage innhold for publisering eller videresalg uten tillatelse fra rettighetshaverne.</li>
+  </ul>
+
+  <h2>4. Personvern og lagring</h2>
+  <p>Akkordverktøy kjører på din egen maskin. Lydfilene og resultatene sendes ikke til noen tjeneste
+    på nettet. De lagres i programmets mapper: <code>jobber/</code> for lydfil, mellomresultater og logg,
+    og <code>ferdige/</code> for ferdige .cho-filer. Filene ligger der til du sletter dem. «Slett» i appen
+    fjerner jobbmappa, mens kopien i <code>ferdige/</code> blir liggende.</p>
+  <p>Internett brukes bare til å laste ned modellene første gang (fra Hugging Face og Meta) og til å
+    installere programvare. Appen samler ikke inn statistikk og bruker ikke informasjonskapsler (cookies).
+    Valgene dine (språk, vokalseparasjon og visning) lagres bare i nettleseren din.</p>
+
+  <h2>5. Ingen garanti</h2>
+  <p>Tjenesten leveres «som den er», uten garanti for at resultatet er riktig, fullstendig eller egnet
+    til et bestemt formål. Vi er ikke ansvarlige for tap eller skade som følge av bruk av tjenesten eller
+    resultatene, så langt loven tillater det.</p>
+
+  <h2>6. Programvare og modeller</h2>
+  <p>Akkordverktøy bygger på åpen kildekode og åpne modeller:</p>
+  <table>
+    <tr><th>Del</th><th>Brukes til</th><th>Lisens</th></tr>
+    <tr><td><a href="https://huggingface.co/NbAiLab/nb-whisper-medium">NB-Whisper</a> (Nasjonalbiblioteket)</td><td>norsk tekst</td><td>Apache 2.0</td></tr>
+    <tr><td><a href="https://huggingface.co/openai/whisper-large-v3-turbo">Whisper large-v3-turbo</a> (OpenAI)</td><td>språk og engelsk tekst</td><td>MIT</td></tr>
+    <tr><td><a href="https://github.com/SYSTRAN/faster-whisper">faster-whisper</a> / CTranslate2</td><td>rask tekstgjenkjenning</td><td>MIT</td></tr>
+    <tr><td><a href="https://github.com/adefossez/demucs">Demucs</a></td><td>vokalseparasjon</td><td>MIT</td></tr>
+    <tr><td><a href="https://pypi.org/project/lv-chordia/">lv-chordia</a> (Music X Lab)</td><td>akkordgjenkjenning</td><td>MIT</td></tr>
+  </table>
+  <p>Lisensene gjelder programvaren og modellene, ikke musikken du analyserer.</p>
+
+  <h2>7. Endringer</h2>
+  <p>Vilkårene kan bli oppdatert. Datoen øverst viser når de sist ble endret.</p>
+
+  <footer><a href="/">← Tilbake til Akkordverktøy</a></footer>
+</main>
+</body>
+</html>

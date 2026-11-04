@@ -348,6 +348,12 @@ def index():
         return HTMLResponse(f.read(), headers={"Cache-Control": "no-store"})
 
 
+@app.get("/vilkar", response_class=HTMLResponse)
+def terms():
+    with open(os.path.join(HERE, "vilkar.html"), encoding="utf-8") as f:
+        return HTMLResponse(f.read())
+
+
 @app.post("/api/jobs")
 async def create_job(file: UploadFile = File(...), lang: str = Form("auto"),
                      separate: bool = Form(True)):

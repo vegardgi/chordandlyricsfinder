@@ -148,6 +148,18 @@
   .sheet .header { margin-bottom: 14px; }
 
   .timing { color: var(--muted); font-size: 12px; margin: 16px 0 0; }
+  .viewbar { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin: 0 0 14px; }
+  .seg-ctl { display: inline-flex; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; }
+  .seg-ctl button { border: 0; border-radius: 0; background: var(--card); color: var(--muted); padding: 5px 11px; }
+  .seg-ctl button + button { border-left: 1px solid var(--line); }
+  .seg-ctl button[aria-pressed="true"] { background: var(--accent-soft); color: var(--text); font-weight: 600; }
+  pre.plain {
+    margin: 0; padding: 14px 16px; background: var(--bg); border: 1px solid var(--line); border-radius: 8px;
+    font: 14px/1.45 ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
+    white-space: pre; overflow-x: auto; tab-size: 4;
+  }
+  pre.plain .pc { color: var(--chord); font-weight: 650; }
+  .hint { color: var(--muted); font-size: 12px; }
   textarea.editor {
     width: 100%; min-height: 380px; resize: vertical; padding: 12px; border-radius: 8px;
     border: 1px solid var(--line); background: var(--bg); color: var(--text);
@@ -160,6 +172,8 @@
   #toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
 
   footer { margin-top: 36px; color: var(--muted); font-size: 13px; text-align: center; }
+  footer a { color: var(--muted); }
+  footer a:hover { color: var(--text); }
   .sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
   @media (max-width: 560px) {
     header { flex-direction: column; align-items: flex-start; }
@@ -199,7 +213,11 @@
 
   <div id="banner"></div>
   <section id="jobs" aria-live="polite"></section>
-  <footer>Alt kjører lokalt på maskinen din. Første låt tar lengre tid fordi modellene lastes ned.</footer>
+  <footer>
+    <p>Alt kjører lokalt på maskinen din. Første låt tar lengre tid fordi modellene lastes ned.</p>
+    <p>Sangtekster og melodier er vernet av opphavsrett – bruk resultatet til egen øving.
+       <a href="/vilkar">Vilkår, opphavsrett og personvern</a></p>
+  </footer>
 </main>
 <div id="toast" role="status"></div>
 
@@ -207,6 +225,9 @@
 "use strict";
 const AUDIO = ["mp3", "wav", "m4a", "flac", "ogg", "aac", "aiff", "aif", "opus"];
 const LANGS = { auto: "Auto", no: "Bokmål", nn: "Nynorsk", en: "Engelsk" };
+const VIEWS = { sheet: "Akkordark", plain: "Akkord over tekst", chordpro: "ChordPro" };
+let viewPref = "sheet";
+try { const v = localStorage.getItem("akkord-view"); if (v in VIEWS) viewPref = v; } catch (e) {}
 const $ = (s, el = document) => el.querySelector(s);
 const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 
@@ -292,6 +313,64 @@ function renderChordPro(src) {
   flushHeader();
   if (inChorus) out.push(`</div>`);
   return out.join("");
+}
+
+// ------------------------------------------------------------ ChordPro -> ren tekst (akkorder over teksten)
+// Klassisk format for å lime inn i melding/e-post/Word: akkordlinje over tekstlinje, justert
+// med mellomrom. Krever skrift med fast bredde for å stå riktig.
+function chordProToText(src) {
+  const out = [];
+  let lastBlank = true;
+  const push = l => { const blank = !l.trim(); if (blank && lastBlank) return; out.push(l); lastBlank = blank; };
+  for (const raw of src.replace(/\r\n?/g, "\n").split("\n")) {
+    const line = raw.replace(/\s+$/, "");
+    const d = line.match(/^\s*\{\s*([a-zA-Z_]+)\s*(?::\s*(.*?))?\s*\}\s*$/);
+    if (d) {
+      const key = d[1].toLowerCase(), val = d[2] || "";
+      if (key === "title" || key === "t") push(val);
+      else if (["subtitle", "st", "artist"].includes(key)) push(val);
+      else if (key === "key") push(`Toneart: ${val}`);
+      else if (key === "capo") push(`Capo: ${val}`);
+      else if (["comment", "c", "comment_italic", "ci", "highlight"].includes(key)) {
+        if (!/^Auto-generert/i.test(val)) push(`(${val})`);
+      }
+      else if (key === "start_of_chorus" || key === "soc") { push(""); push("Refreng:"); }
+      else if (key === "end_of_chorus" || key === "eoc") push("");
+      continue;
+    }
+    if (line.startsWith("#")) continue;
+    if (!line.trim()) { push(""); continue; }
+    const parts = line.split(/\[([^\]]*)\]/);
+    if (parts.length === 1) { push(line); continue; }
+    const lyricOnly = parts.filter((_, i) => i % 2 === 0).join("");
+    if (!lyricOnly.trim()) {                                    // bare akkorder
+      push(parts.filter((_, i) => i % 2 === 1).join("   "));
+      continue;
+    }
+    let chords = "", lyric = parts[0];
+    for (let i = 1; i < parts.length; i += 2) {
+      const ch = parts[i], txt = parts[i + 1] || "";
+      let col = lyric.length;
+      const need = chords.length ? chords.length + 1 : 0;      // minst ett mellomrom mellom akkorder
+      if (col < need) { lyric += " ".repeat(need - col); col = need; }
+      chords = chords.padEnd(col) + ch;
+      lyric += txt;
+    }
+    push(chords.replace(/\s+$/, ""));
+    push(lyric.replace(/\s+$/, ""));
+  }
+  while (out.length && !out[out.length - 1].trim()) out.pop();
+  return out.join("\n") + "\n";
+}
+
+// Ren tekst -> HTML med akkordlinjene farget (samme tekst som kopieres)
+function plainToHtml(txt) {
+  const chordTok = /^[A-G][#b]?(m|maj|min|dim|aug|sus|add|M)?[0-9]*(\([^)]*\))?([#b][0-9]+)*(sus[0-9]*)?(\/[A-G][#b]?)?$/;
+  return txt.split("\n").map(l => {
+    const toks = l.trim().split(/\s+/);
+    const isChordLine = l.trim() && toks.every(t => chordTok.test(t));
+    return isChordLine ? `<span class="pc">${esc(l)}</span>` : esc(l);
+  }).join("\n");
 }
 
 // ------------------------------------------------------------ opplasting
@@ -415,19 +494,39 @@ function bodyFor(j, state) {
       setTimeout(() => ta.focus(), 0);
       return body;
     }
+    const view = state.view || viewPref;
+    const plain = chordProToText(j.cho || "");
+    const content = view === "sheet" ? `<div class="sheet">${renderChordPro(j.cho || "")}</div>`
+      : view === "plain" ? `<pre class="plain">${plainToHtml(plain)}</pre>`
+      : `<pre class="plain">${esc(j.cho || "")}</pre>`;
     body.innerHTML = `
       <div class="actions">
+        <button class="primary copy-cho" type="button" title="ChordPro: [Akkord] rett foran ordet – for OnSong, songbook-apper o.l.">Kopier ChordPro</button>
+        <button class="primary copy-plain" type="button" title="Akkordlinje over tekstlinje – for melding, e-post, Word">Kopier akkord over tekst</button>
         <a class="btn" href="/api/jobs/${j.id}/cho" download>Last ned .cho</a>
-        <button class="copy" type="button">Kopier</button>
         <button class="edit" type="button">Rediger</button>
         <span class="spacer"></span>
         <button class="retry" type="button">Kjør på nytt …</button>
         <button class="danger del" type="button">Slett</button>
       </div>
       ${retryRow(j, state)}
-      <div class="sheet">${renderChordPro(j.cho || "")}</div>
+      <div class="viewbar">
+        <span class="seg-ctl" role="group" aria-label="Visning">
+          ${Object.entries(VIEWS).map(([v, t]) => `<button type="button" data-view="${v}" aria-pressed="${v === view}">${t}</button>`).join("")}
+        </span>
+        ${view === "plain" ? `<span class="hint">Slik blir teksten når du kopierer. Akkordene står over riktig ord i skrift med fast bredde (f.eks. Courier).</span>` : ""}
+      </div>
+      ${content}
       ${j.timing ? `<p class="timing">Tid: ${esc(j.timing)}</p>` : ""}`;
-    $(".copy", body).onclick = async () => toast(await copyText(j.cho || "") ? "Kopiert" : "Kunne ikke kopiere");
+    body.querySelectorAll("[data-view]").forEach(b => b.onclick = () => {
+      state.view = viewPref = b.dataset.view;
+      try { localStorage.setItem("akkord-view", viewPref); } catch (e) {}
+      update(j, true);
+    });
+    $(".copy-cho", body).onclick = async () =>
+      toast(await copyText(j.cho || "") ? "ChordPro kopiert" : "Kunne ikke kopiere");
+    $(".copy-plain", body).onclick = async () =>
+      toast(await copyText(plain) ? "Akkord over tekst kopiert" : "Kunne ikke kopiere");
     $(".edit", body).onclick = () => { state.editing = true; update(j, true); };
   } else if (j.status === "error" || j.status === "cancelled") {
     body.innerHTML = `
@@ -488,15 +587,21 @@ function update(j, force = false) {
   const show = (j.status === "done" && expanded.has(j.id)) || j.status === "error" || j.status === "cancelled";
   if (!show) { body.hidden = true; body.innerHTML = ""; state.renderedKey = null; return; }
   if (state.editing && !force) return;              // ikke rør teksten mens du redigerer
-  const key = [j.status, j.cho, j.error, j.log, j.timing, state.editing, state.retryOpen, j.lang, j.separate].join("\u0001");
+  const key = [j.status, j.cho, j.error, j.log, j.timing, state.editing, state.retryOpen, state.view || viewPref, j.lang, j.separate].join("\u0001");
   if (key === state.renderedKey && !force) return;
   state.renderedKey = key;
   body.hidden = false;
   body.replaceChildren(bodyFor(j, state));
 }
 
+let firstRender = true;
 function render(list) {
   lastData = list;
+  if (firstRender) {                       // åpne nyeste ferdige låt ved oppstart
+    firstRender = false;
+    const newest = list.find(j => j.status === "done");
+    if (newest) expanded.add(newest.id);
+  }
   const ids = new Set(list.map(j => j.id));
   for (const [id, c] of cards) if (!ids.has(id)) { c.el.remove(); cards.delete(id); expanded.delete(id); }
   let prev = null;

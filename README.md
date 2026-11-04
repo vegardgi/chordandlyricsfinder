@@ -26,9 +26,11 @@ Deretter åpnes appen i nettleseren på <http://localhost:8765>.
   mp3, wav, m4a, flac, ogg, aiff – ffmpeg trengs ikke.
 - Velg språk (Auto / Bokmål / Nynorsk / Engelsk) og om vokalen skal skilles ut.
 - Låtene kjøres én om gangen i en kø, med steg, fremdrift og tid brukt.
-- Ferdig låt vises med akkordene over teksten. Du kan **redigere** ChordPro direkte
-  (Ctrl/⌘+S lagrer), **laste ned** `.cho`, **kopiere**, **kjøre på nytt** med andre valg,
-  eller **slette**.
+- Ferdig låt vises med akkordene over teksten, i tre visninger: **Akkordark**,
+  **Akkord over tekst** (ren tekst med akkordlinje over tekstlinje, fast bredde) og **ChordPro**.
+- Knapper: **Kopier ChordPro**, **Kopier akkord over tekst** (for melding/e-post/Word),
+  **Last ned .cho**, **Rediger** (Ctrl/⌘+S lagrer), **Kjør på nytt** med andre valg, **Slett**.
+- Nederst: lenke til vilkår, opphavsrett og personvern (`/vilkar`).
 - Alle ferdige `.cho`-filer kopieres til mappa `ferdige/` («Åpne mappe med ferdige filer»).
 - Feiler en jobb, vises årsaken og et logg-utdrag, med knapp for å prøve igjen uten
   vokalseparasjon.
