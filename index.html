@@ -96,6 +96,18 @@
   fieldset.tools-set { border: 0; padding: 0; margin: 0; min-width: 0; }
   fieldset.tools-set:disabled { opacity: .4; filter: grayscale(1); }
 
+  .picked { margin: 2px 0 0; font-size: 15px; font-weight: 600; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .staged { background: var(--card); border-radius: 22px; padding: 18px 22px; display: flex; flex-direction: column; gap: 14px;
+            border: 3px solid var(--accent); }
+  .staged h2 { margin: 0; font-size: 17px; font-weight: 800; }
+  .staged ul { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+  .staged li { display: flex; align-items: center; gap: 12px; padding: 8px 6px 8px 14px; border-radius: 14px; background: var(--chip); }
+  .staged .fname { flex: 1; min-width: 0; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .staged .fmeta { color: var(--muted); font-size: 14px; font-family: var(--mono); white-space: nowrap; }
+  .staged li button { border: 0; width: 40px; min-height: 40px; padding: 0; justify-content: center; font-size: 18px; background: transparent; color: var(--muted); }
+  .staged-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; }
+  .staged-actions .summary { color: var(--muted); font-size: 14px; }
+  #start { min-height: 52px; padding: 0 34px; font-size: 18px; }
   #banner { display: none; padding: 12px 18px; border-radius: 16px; background: var(--danger-soft); color: var(--danger); font-size: 15px; }
   #banner.show { display: block; }
 
@@ -276,6 +288,7 @@
     <p class="lead">Tekst og akkorder over riktig ord – klart til å kopiere.</p>
     <button type="button" id="pick" class="primary">Velg lydfil</button>
     <p class="small">eller dra den hit · mp3, wav, m4a, flac, ogg, aiff · flere filer samtidig</p>
+    <p class="picked" id="picked" hidden></p>
     <input type="file" id="file" class="sr" tabindex="-1" multiple accept="audio/*,.mp3,.wav,.m4a,.flac,.ogg,.aac,.aiff,.aif,.opus">
   </section>
 
@@ -304,6 +317,16 @@
   <p class="mode-desc" id="mode-desc">Rask gir ofte godt resultat. Grundig er tregere – prøv den hvis Rask ikke ble god nok.</p>
   <p class="mode-desc" id="chords-desc" hidden>Kun akkorder er raskest – språk og Rask/Grundig gjelder bare teksten.</p>
 
+  <section class="staged" id="staged" hidden aria-labelledby="staged-title">
+    <h2 id="staged-title">Klar til å starte</h2>
+    <ul id="staged-list"></ul>
+    <div class="staged-actions">
+      <button type="button" id="start" class="primary">Start</button>
+      <span class="summary" id="staged-summary"></span>
+      <span class="spacer" style="flex:1"></span>
+      <button type="button" id="clear" class="quiet">Fjern alle</button>
+    </div>
+  </section>
   <div id="banner" role="alert"></div>
   <section id="jobs" aria-live="polite" aria-label="Låter"></section>
 
@@ -356,7 +379,7 @@ try {
   if (saved.mode === "grundig") quality.value = "1";
   if (["both", "lyrics", "chords"].includes(saved.what)) whatSel.value = saved.what;
 } catch (e) { /* ingen lagring */ }
-const saveOpts = () => { showMode(); showWhat(); try { localStorage.setItem("akkord-opts", JSON.stringify({ lang: langSel.value, mode: isGrundig() ? "grundig" : "rask", what: whatSel.value })); } catch (e) {} };
+const saveOpts = () => { showMode(); showWhat(); if (typeof renderStaged === "function") renderStaged(); try { localStorage.setItem("akkord-opts", JSON.stringify({ lang: langSel.value, mode: isGrundig() ? "grundig" : "rask", what: whatSel.value })); } catch (e) {} };
 document.querySelectorAll('input[name="what"]').forEach(r => r.onchange = saveOpts);
 document.querySelectorAll('input[name="lang"]').forEach(r => r.onchange = saveOpts);
 quality.oninput = saveOpts;
@@ -809,11 +832,55 @@ window.addEventListener("drop", e => {
   upload([...e.dataTransfer.files]);
 });
 
-async function upload(files) {
+// Valgte filer venter her til brukeren trykker Start (ingenting starter automatisk)
+let staged = [], starting = false;
+const fmtSize = n => n >= 1e6 ? `${(n / 1e6).toFixed(1).replace(".", ",")} MB` : `${Math.max(1, Math.round(n / 1e3))} kB`;
+function upload(files) {                       // kalles ved valg/slipp: legg i lista, ikke start
   const ok = [], skipped = [];
   for (const f of files) (AUDIO.includes(f.name.split(".").pop().toLowerCase()) ? ok : skipped).push(f);
   if (skipped.length) toast(`Hoppet over ${skipped.map(f => f.name).join(", ")} – ikke en lydfil`);
   for (const f of ok) {
+    const item = { file: f, dur: null };
+    staged.push(item);
+    try {                                       // vis lengden på låta
+      const url = URL.createObjectURL(f), a = new Audio();
+      a.preload = "metadata";
+      a.onloadedmetadata = () => { if (isFinite(a.duration)) item.dur = a.duration; URL.revokeObjectURL(url); renderStaged(); };
+      a.onerror = () => URL.revokeObjectURL(url);
+      a.src = url;
+    } catch (e) {}
+  }
+  renderStaged();
+  if (ok.length) $("#staged").scrollIntoView({ behavior: "smooth", block: "center" });
+}
+function renderStaged() {
+  const box = $("#staged");
+  box.hidden = !staged.length;
+  const picked = $("#picked");
+  picked.hidden = !staged.length;
+  picked.textContent = staged.length === 1 ? `Valgt: ${staged[0].file.name}` : `Valgt: ${staged.length} filer`;
+  $("#pick").textContent = staged.length ? "Velg flere filer" : "Velg lydfil";
+  $("#staged-list").innerHTML = staged.map((it, i) => `<li>
+      <span class="fname" title="${esc(it.file.name)}">${esc(it.file.name)}</span>
+      <span class="fmeta">${it.dur ? fmtTime(it.dur) + " · " : ""}${fmtSize(it.file.size)}</span>
+      <button type="button" data-rm="${i}" aria-label="Fjern ${esc(it.file.name)}" ${starting ? "disabled" : ""}>✕</button>
+    </li>`).join("");
+  $("#staged-list").querySelectorAll("[data-rm]").forEach(b => b.onclick = () => { staged.splice(+b.dataset.rm, 1); renderStaged(); });
+  const what = { both: "tekst og akkorder", lyrics: "kun tekst", chords: "kun akkorder" }[whatSel.value];
+  $("#staged-summary").textContent = starting ? "" :
+    `Lager ${what}${whatSel.value === "chords" ? "" : ` · ${LANGS[langSel.value]} · ${isGrundig() ? "Grundig" : "Rask"}`}`;
+  $("#start").textContent = staged.length > 1 ? `Start ${staged.length} låter` : "Start";
+  $("#start").disabled = starting;
+  $("#clear").disabled = starting;
+}
+$("#clear").onclick = () => { staged = []; renderStaged(); };
+$("#start").onclick = async () => {
+  if (!staged.length || starting) return;
+  starting = true;
+  const todo = staged.slice();
+  for (let i = 0; i < todo.length; i++) {
+    const f = todo[i].file;
+    $("#start").textContent = todo.length > 1 ? `Laster opp ${i + 1} av ${todo.length} …` : "Laster opp …";
     const fd = new FormData();
     fd.append("file", f);
     fd.append("lang", langSel.value);
@@ -822,10 +889,15 @@ async function upload(files) {
     try {
       const j = await api("POST", "/api/jobs", fd);
       expanded.add(j.id);
+      staged = staged.filter(x => x !== todo[i]);
       poll(true);
     } catch (e) { toast(`${f.name}: ${e.message}`); }
+    renderStaged();
   }
-}
+  starting = false;
+  renderStaged();
+  if (!staged.length) $("#jobs").scrollIntoView({ behavior: "smooth", block: "start" });
+};
 
 $("#open-folder").onclick = async () => {
   try { await api("POST", "/api/open-folder"); }

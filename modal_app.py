@@ -141,7 +141,8 @@ def run_job_modal(jid):
     from modal.exception import TimeoutError as ModalTimeout
     with akkord.lock:
         j = akkord.jobs[jid]
-        j.update(status="running", stage="Starter GPU", progress=0.01, detail="", error=None,
+        j.update(status="running", stage="Starter GPU", progress=0.01,
+                 detail="første låt etter en pause tar litt lengre tid", error=None,
                  log=None, started=time.time(), finished=None, cho=None, timing=None)
         path, base = akkord.audio_path(j), akkord.out_base(j)
         lang, separate, filename = j["lang"], j["separate"], j["audio"]

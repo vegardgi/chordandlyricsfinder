@@ -22,7 +22,8 @@ minutter (ca. 1–2 GB). Skriptet bruker [uv](https://docs.astral.sh/uv/) hvis d
 ellers Python 3.10–3.13, og installerer uv selv hvis ingen av delene finnes.
 Deretter åpnes appen i nettleseren på <http://localhost:8765>.
 
-- Slipp én eller flere lydfiler hvor som helst i vinduet (eller klikk for å velge).
+- Slipp én eller flere lydfiler hvor som helst i vinduet (eller klikk for å velge). Filene vises
+  med navn, lengde og størrelse under «Klar til å starte» – ingenting starter før du trykker **Start**.
   mp3, wav, m4a, flac, ogg, aiff – ffmpeg trengs ikke.
 - Velg hva du vil ha: **Tekst og akkorder**, **Kun tekst** eller **Kun akkorder** (raskest – ca. 15 s
   for en 3-min-låt; språk og Rask/Grundig gråes da ut). Knapper og visninger som ikke gjelder for låta
