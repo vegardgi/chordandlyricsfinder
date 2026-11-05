@@ -246,8 +246,7 @@ class Tracker:
                 if j and str(j.get("detail", "")).startswith("Laster ned"):
                     j["detail"] = ""
         elif line.startswith("Inference: ") and self.step == "chords":
-            self.inference += 1                                   # lv-chordia: 5 modeller
-            self.at(0.15 + 0.85 * (self.inference - 1) / 5)
+            pass                                                  # fremdrift kommer som «% n» per bit
         else:
             m = DOWNLOAD.search(line)
             # «Fetching N files» er bare en sjekk mot lokalt lager, ikke en nedlasting

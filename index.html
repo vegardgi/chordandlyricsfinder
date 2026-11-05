@@ -471,8 +471,18 @@ async function copyText(text) {
 }
 
 // Kommentarer som er navn på en del i låta vises som overskrift, ikke som vanlig kommentar
-const SECTION_RE = /^(intro|outro|mellomspill|solo( \/ instrumental)?|instrumental|vers( \d+)?|refreng|pre-refreng|bro|bridge|verse( \d+)?|chorus|interlude)$/i;
+const SECTION_RE = /^(intro|outro|mellomspill|solo( \/ instrumental)?|instrumental|vers( \d+)?|refreng( \d+)?|pre-refreng|pre-chorus|bro|bridge|verse( \d+)?|chorus|interlude|tag|akkorder|chords)$/i;
 const isSection = v => SECTION_RE.test((v || "").trim());
+// {start_of_verse: Vers 1} / {start_of_chorus: Refreng} / {start_of_bridge: Bro} … -> [type, tittel]
+const PART_KEYS = { start_of_verse: "verse", sov: "verse", start_of_chorus: "chorus", soc: "chorus",
+                    start_of_bridge: "bridge", sob: "bridge", start_of_part: "part" };
+const END_KEYS = new Set(["end_of_verse", "eov", "end_of_chorus", "eoc", "end_of_bridge", "eob", "end_of_part"]);
+const partTitle = (key, val) => {
+  const kind = PART_KEYS[key];
+  if (!kind) return null;
+  const v = (val || "").replace(/^label\s*=\s*"?([^"]*)"?$/i, "$1").trim();
+  return { kind, title: v || (kind === "chorus" ? "Refreng" : kind === "bridge" ? "Bro" : "") };
+};
 
 // ------------------------------------------------------------ ChordPro -> HTML
 function choMeta(src) {
@@ -504,8 +514,14 @@ function renderChordPro(src, skipHeader = false) {
         flushHeader();
         out.push(isSection(val) ? `<p class="sec"><span>${esc(val)}</span></p>` : `<p class="comment">${esc(val)}</p>`);
       }
-      else if (key === "start_of_chorus" || key === "soc") { flushHeader(); out.push(`<div class="chorus">`); inChorus = true; }
-      else if ((key === "end_of_chorus" || key === "eoc") && inChorus) { out.push(`</div>`); inChorus = false; }
+      else if (partTitle(key, val)) {
+        const p = partTitle(key, val);
+        flushHeader();
+        if (inChorus) out.push(`</div>`);
+        if (p.title) out.push(`<p class="sec"><span>${esc(p.title)}</span></p>`);
+        out.push(`<div class="${p.kind === "chorus" ? "chorus" : "part"}">`); inChorus = true;
+      }
+      else if (END_KEYS.has(key) && inChorus) { out.push(`</div>`); inChorus = false; }
       continue;
     }
     flushHeader();
@@ -547,8 +563,8 @@ function chordProToText(src) {
         if (isSection(val)) { push(""); push(`${val}:`); }
         else if (!/^Auto-generert/i.test(val)) push(`(${val})`);
       }
-      else if (key === "start_of_chorus" || key === "soc") { push(""); push("Refreng:"); }
-      else if (key === "end_of_chorus" || key === "eoc") push("");
+      else if (partTitle(key, val)) { const p = partTitle(key, val); push(""); if (p.title) push(`${p.title}:`); }
+      else if (END_KEYS.has(key)) push("");
       continue;
     }
     if (line.startsWith("#")) continue;
@@ -696,9 +712,10 @@ function sheetUnits(cho) {
     const d = line.match(/^\s*\{\s*([a-zA-Z_]+)\s*(?::\s*(.*?))?\s*\}\s*$/);
     if (d) {
       const key = d[1].toLowerCase(), val = d[2] || "";
-      if (["comment", "c", "comment_italic", "ci"].includes(key) && isSection(val)) {
+      const p = partTitle(key, val);
+      if ((["comment", "c", "comment_italic", "ci"].includes(key) && isSection(val)) || (p && p.title)) {
         if (units[units.length - 1].length) units.push([]);
-        units[units.length - 1].push(`<p class="sec"><span>${esc(val)}</span></p>`);
+        units[units.length - 1].push(`<p class="sec"><span>${esc(p ? p.title : val)}</span></p>`);
       } else if (["comment", "c", "comment_italic", "ci"].includes(key) && !/^Auto-generert/i.test(val))
         units[units.length - 1].push(`<p class="comment">${esc(val)}</p>`);
       continue;

@@ -635,21 +635,64 @@ def transcribe_fast(y, model, lang, beams, sr=16000):
 
 # ---------------------------------------------------------------- linjer
 
+# Ord som alltid skrives med stor forbokstav – de starter ikke nødvendigvis en ny frase
+ALWAYS_CAPS = {"i", "i'm", "i'll", "i've", "i'd", "god", "jesus", "lord", "christ", "father", "spirit",
+               "gud", "herre", "herren", "kristus", "jesu", "ånd", "ånden", "faderen", "hallelujah",
+               "halleluja", "hosanna", "israel", "zion", "sion"}
+
+
 def split_lines(words, gap=0.9, max_words=12):
-    """Del ordstrømmen i linjer på pauser og punktum."""
+    """Del ordstrømmen i linjer på pauser og punktum. Whisper skriver ofte sang uten punktum,
+    men med stor forbokstav der en ny frase starter («…in the sand Where they say…») – del der også."""
     lines, cur = [], []
     for i, w in enumerate(words):
         if cur:
             pause = w["start"] - cur[-1]["end"]
             punct = re.search(r"[.!?;:]$", cur[-1]["text"]) and len(cur) >= 3
             comma = cur[-1]["text"].endswith(",") and len(cur) >= 6
-            if pause > gap or punct or comma or len(cur) >= max_words \
+            word = re.sub(r"[^\wæøåÆØÅ']", "", w["text"])
+            capital = len(cur) >= 3 and word[:1].isupper() and word.lower() not in ALWAYS_CAPS
+            if pause > gap or punct or comma or capital or len(cur) >= max_words \
                or (pause > 0.45 and len(cur) >= 5):
                 lines.append(cur); cur = []
         cur.append(w)
     if cur:
         lines.append(cur)
-    return lines
+    out = []
+    for line in lines:
+        out.extend(_split_long(line))
+    return out
+
+
+LONG_LINE = 8          # flere ord enn dette -> del på beste sted
+
+
+def _split_long(line):
+    """Del lange linjer der en ny frase mest sannsynlig starter: lengst pause, ny setning,
+    stor forbokstav («I'll», «And»), etter komma – og helst nær midten."""
+    if len(line) <= LONG_LINE:
+        return [line]
+    best, at = None, None
+    for k in range(3, len(line) - 2):
+        prev, w = line[k - 1], line[k]
+        word = re.sub(r"[^\wæøåÆØÅ']", "", w["text"])
+        score = min(w["start"] - prev["end"], 1.0) * 2
+        if re.search(r"[.!?;:]$", prev["text"]):
+            score += 2
+        elif prev["text"].endswith(","):
+            score += 1.2
+        if word[:1].isupper():
+            score += 1.0 if word.lower() not in ALWAYS_CAPS else 0.6
+        if word.lower() in LINE_STARTS:
+            score += 0.4
+        score -= abs(k - len(line) / 2) / len(line)      # balanserte halvdeler
+        if best is None or score > best:
+            best, at = score, k
+    return _split_long(line[:at]) + _split_long(line[at:])
+
+
+LINE_STARTS = {"and", "but", "so", "cause", "'cause", "yeah", "oh", "when", "where", "i'll", "i",
+               "og", "men", "så", "for", "når", "der", "jeg", "du", "vi"}
 
 # ---------------------------------------------------------------- fletting
 
@@ -708,6 +751,14 @@ def to_chordpro(blocks, title, artist=None, key=None):
             if o and o[-1] != "":
                 o.append("")
             continue
+        if b[0] == "open":                          # start på vers/refreng/bro med tittel
+            if o and o[-1] != "":
+                o.append("")
+            o.append(f"{{start_of_{b[1]}: {b[2]}}}")
+            continue
+        if b[0] == "close":
+            o.append(f"{{end_of_{b[1]}}}")
+            continue
         if b[0] == "label":                         # overskrift for instrumentalt parti
             if o and o[-1] != "":
                 o.append("")
@@ -730,24 +781,47 @@ def to_chordpro(blocks, title, artist=None, key=None):
 
 # ---------------------------------------------------------------- akkorder
 
+CHORD_WIN, CHORD_OV = 40.0, 10.0     # akkorder i biter: 40 s vinduer, 10 s overlapp
+
+
 def find_chords(audio, cache, redo=False, quiet=False):
-    """Rå lv-chordia-segmenter (Harte-labels). Bufres i <navn>.chords.raw.json."""
+    """Rå lv-chordia-segmenter (Harte-labels). Bufres i <navn>.chords.raw.json.
+
+    Låta analyseres i overlappende biter på 40 s. På hele låta under ett «drukner» stille
+    partier (et sparsomt første vers) mot de høye refrengene, og modellen hører én akkord der
+    det er flere (målt: «Build a Boat» ga Db i 22 s på hele låta, men Db–Gb–Bbm–Ab–Gb–Db i
+    biter – slik låta faktisk går). Bitene settes sammen på midten av overlappen."""
     if os.path.exists(cache) and not redo:
         say("• Akkorder: gjenbruker " + os.path.basename(cache))
         return read_json(cache)
     if not quiet:
         say("• Akkorder: lv-chordia")
-    src, tmp = audio, None
-    if not soundfile_can_read(audio):                     # f.eks. m4a: dekod til wav først
-        import soundfile
-        tmp = os.path.splitext(cache)[0] + ".tmp.wav"
-        soundfile.write(tmp, load_audio(audio, 22050, mono=True), 22050, subtype="PCM_16")
-        src = tmp
-    try:
-        segs = recognize(src, "full")
-    finally:
-        if tmp and os.path.exists(tmp):
-            os.remove(tmp)
+    import soundfile, tempfile
+    sr = 22050
+    y = load_audio(audio, sr, mono=True)
+    dur = len(y) / sr
+    starts, t = [], 0.0
+    while True:
+        starts.append(t)
+        if t + CHORD_WIN >= dur:
+            break
+        t += CHORD_WIN - CHORD_OV
+    prog = None if quiet else Progress()
+    segs = []
+    with tempfile.TemporaryDirectory() as d:
+        for k, s0 in enumerate(starts):
+            e0 = min(dur, s0 + CHORD_WIN)
+            lo = s0 + CHORD_OV / 2 if k > 0 else 0.0
+            hi = e0 - CHORD_OV / 2 if k + 1 < len(starts) else float("inf")
+            path = os.path.join(d, f"bit{k}.wav")
+            soundfile.write(path, y[int(s0 * sr): int(e0 * sr)], sr, subtype="PCM_16")
+            for seg in recognize(path, "full"):
+                a, b = float(seg["start_time"]) + s0, float(seg["end_time"]) + s0
+                a, b = max(a, lo), min(b, hi)
+                if b - a > 0.01:
+                    segs.append({"start_time": round(a, 2), "end_time": round(b, 2), "chord": seg["chord"]})
+            if prog:
+                prog((k + 1) / len(starts))
     write_json(cache, segs)
     free_memory()
     return segs
@@ -774,50 +848,62 @@ def fast_lyrics(y, a, timer):
     free_memory()
     return words
 
-def with_section_breaks(blocks, lines):
-    """Sett inn ('break',) foran linjer der en ny del av låta starter (samme inndeling som
-    akkordarket: gjentatte linjer = refreng, ellers vers, og lange pauser)."""
-    if len(lines) < 2:
-        return blocks
-    try:
-        import chart
-        parts = chart.label_blocks(chart.vocal_blocks(lines, 2.0))
-    except Exception:  # noqa: BLE001
-        return blocks
-    first_word = {id(ln[0]): i for i, ln in enumerate(lines)}
-    starts = {first_word[id(p["words"][0])] for p in parts if id(p["words"][0]) in first_word} - {0}
-    out, li = [], 0
-    for b in blocks:
-        if b[0] == "line":
-            if li in starts:
-                out.append(("break",))
-            li += 1
-        out.append(b)
-    return out
-
-
 SOLO_SECONDS = 20     # instrumentalt parti midt i låta så langt eller lenger -> «Solo / instrumental»
+INTERLUDE_SECONDS = 6 # kortere akkordpartier mellom linjer er bare overganger, ikke egne deler
 
 
-def label_instrumentals(blocks, lines):
-    """Gi rene akkordpartier en overskrift: Intro, Mellomspill, Solo / instrumental, Outro.
-    Om noe er en solo kan ikke høres ut av akkordene – lange partier merkes derfor
-    «Solo / instrumental» (gjettet ut fra lengden)."""
+def with_sections(blocks, lines, words):
+    """Del låta i seksjoner med tittel (samme inndeling som akkordarket):
+    sungne deler -> ('open', kind, tittel) … ('close', kind) rundt linjene (verse/chorus/bridge),
+    rene akkordpartier -> ('label', tittel): Intro, Mellomspill / Interlude, Solo, Outro.
+    Titlene følger låtas språk. Hver del får en tittel."""
+    import chart
+    lang = chart.song_lang(words)
+    L = chart.LABELS[lang]
+    try:
+        parts = chart.label_blocks(chart.vocal_blocks(lines, 2.0), lang)
+    except Exception:  # noqa: BLE001
+        parts = []
+    first_word = {id(ln[0]): i for i, ln in enumerate(lines)}
+    starts = {}                                       # linjenr -> (kind, tittel)
+    for p in parts:
+        i = first_word.get(id(p["words"][0]))
+        if i is not None:
+            starts[i] = (p.get("kind", "verse"), p["label"])
+    if 0 not in starts:
+        starts[0] = ("verse", f"{L['verse']} 1")
     n_lines = sum(1 for b in blocks if b[0] == "line")
-    out, li = [], 0
+    out, li, current = [], 0, None                    # current = (kind, tittel) for delen som er åpen
+    is_open = False
     for b in blocks:
         if b[0] == "line":
+            if li in starts or not is_open:
+                if is_open:
+                    out.append(("close", current[0]))
+                current = starts.get(li, current or ("verse", f"{L['verse']} 1"))
+                out.append(("open", current[0], current[1]))
+                is_open = True
+            out.append(b)
             li += 1
-        elif b[0] == "chords":
+            continue
+        if b[0] == "chords":
+            gap = lines[li][0]["start"] - lines[li - 1][-1]["end"] if 0 < li < n_lines else 0
+            if 0 < li < n_lines and gap < INTERLUDE_SECONDS:
+                out.append(b)                           # kort overgang: blir stående i delen
+                continue
+            if is_open:                                 # instrumentalt parti avslutter delen
+                out.append(("close", current[0]))
+                is_open = False
             if li == 0:
-                name = "Intro"
+                name = L["intro"]
             elif li >= n_lines:
-                name = "Outro"
+                name = L["outro"]
             else:
-                gap = lines[li][0]["start"] - lines[li - 1][-1]["end"]
-                name = "Solo / instrumental" if gap >= SOLO_SECONDS else "Mellomspill"
+                name = L["solo"] if gap >= SOLO_SECONDS else L["interlude"]
             out.append(("label", name))
         out.append(b)
+    if is_open:
+        out.append(("close", current[0]))
     return out
 
 
@@ -929,8 +1015,8 @@ def main():
     key_str = a.key or (key_name(key, names) if key else None)
     lines = split_lines(words)
     blocks = merge(lines, chords)
-    if lines:                                         # bare akkorder: ingen overskrifter å sette
-        blocks = label_instrumentals(with_section_breaks(blocks, lines), lines)
+    if lines:                                         # bare akkorder: ingen deler å sette titler på
+        blocks = with_sections(blocks, lines, words)
     cho = to_chordpro(blocks, title, artist, key_str)
     with open(base + ".cho", "w", encoding="utf-8") as f:
         f.write(cho)
@@ -944,7 +1030,8 @@ def main():
             raise StopIteration
         import chart
         sheet = chart.make_chart(load_audio(audio, 22050, mono=True), 22050, words, lines,
-                                 chords, title, artist, key_str)
+                                 chords, title, artist, key_str,
+                                 lang=chart.song_lang(words) if words else None)
         if sheet:
             with open(base + ".chart.cho", "w", encoding="utf-8") as f:
                 f.write(sheet)

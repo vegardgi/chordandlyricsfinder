@@ -118,7 +118,7 @@ Filer som lages ved siden av lydfila:
 
 | Fil | Innhold |
 |---|---|
-| `sang.cho` | ChordPro med tekst og akkorder |
+| `sang.cho` | ChordPro med tekst og akkorder; hver del i `{start_of_verse: Vers 1}`, `{start_of_chorus: Refreng}`, `{start_of_bridge: Bro}` (engelske låter: Verse/Chorus/Bridge/Pre-Chorus), instrumentale partier som `{comment: Mellomspill}`/Intro/Solo/Outro |
 | `sang.chords.json` | akkorder med start/slutt (sek) |
 | `sang.chords.raw.json` | rå lv-chordia-resultat – gjenbrukes ved neste kjøring |
 | `sang.words.json` | ord med tid – gjenbrukes ved neste kjøring, kan redigeres for hånd |
@@ -168,11 +168,11 @@ Slik er det gjort raskt:
 - Korte gjennomgangsakkorder (f.eks. C#dim7) kan få litt feil navn.
 - Whisper kan av og til hoppe over eller «finne på» tekst, særlig i instrumentale partier.
 - Låter med både norsk og engelsk tekst får ett språk (flertallet). Velg språk manuelt ved behov.
-- Linjeskift gjettes ut fra pauser i sangen – vers/refreng-merking kommer ikke automatisk.
+- Linjeskift gjettes ut fra pauser, stor forbokstav og lengde. Vers/refreng/pre-chorus/bro gjettes ut
+  fra tekst som gjentar seg – sjekk titlene, særlig på låter med lite gjentakelse.
 
 ## Senere
 
 
 - Kobling til songbook-appen (ChordPro-basert, OnSong-lignende).
 - Når teksten finnes fra før (CCLI/worship-repoer): align kjent tekst i stedet for Whisper.
-- Automatisk vers/refreng ut fra tekst som gjentar seg.

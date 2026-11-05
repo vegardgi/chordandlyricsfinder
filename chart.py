@@ -177,28 +177,76 @@ def _sim(a, b):
     return difflib.SequenceMatcher(None, a, b).ratio()
 
 
-def vocal_blocks(lines, bar_len):
-    """Linjer -> blokker. Skiller der sangen går fra linjer som gjentas i låta (refreng-
-    aktige) til unike linjer (vers-aktige) og omvendt, og ved lange pauser."""
-    texts = [norm_text(ln) for ln in lines]
-    rep = []
-    for i, t in enumerate(texts):
-        if len(t) < 3:                                   # «Hei!» o.l. arver fra linja før
-            rep.append(rep[-1] if rep else False)
+def repeat_counts(flat, owner, n_lines, N=3, min_run=6):
+    """Hvor mange ganger hver linjes tekst forekommer i låta (1 = unik). Finner lange gjentatte
+    ordsekvenser (tåler hørefeil og ulik linjedeling), slår sammen treff som ligger rett ved
+    siden av hverandre til én forekomst, og glatter så tallene over nabolinjene."""
+    n = len(flat)
+    grams = {}
+    for i in range(n - N + 1):
+        grams.setdefault(tuple(flat[i:i + N]), []).append(i)
+    pairs = sorted((occ[a], occ[b]) for occ in grams.values() if len(occ) <= 16
+                   for a in range(len(occ)) for b in range(a + 1, len(occ)) if occ[b] - occ[a] >= 6)
+    runs = []                                         # [p0, p1, q0, q1] – samme tekst to steder
+    for p, q in pairs:
+        for r in runs:
+            if 0 < p - r[1] <= 6 and abs((q - p) - (r[3] - r[1])) <= 3 and q > r[3]:
+                r[1], r[3] = p, q
+                break
+        else:
+            runs.append([p, p, q, q])
+    match = [set() for _ in range(n_lines)]
+    for p0, p1, q0, q1 in runs:
+        if p1 + N - p0 < min_run:
             continue
-        rep.append(any(j != i and len(texts[j]) >= 3 and _sim(t, texts[j]) >= 0.7
-                       for j in range(len(texts))))
+        for k in range(p1 + N - p0):
+            a = p0 + k
+            b = q0 + round(k * (q1 - q0) / max(1, p1 - p0))
+            if a < n and b < n and owner[a] != owner[b]:
+                match[owner[a]].add(owner[b])
+                match[owner[b]].add(owner[a])
+    raw = []
+    for i in range(n_lines):
+        occ, last = 1, None
+        for j in sorted(match[i]):
+            if abs(j - i) > 2 and (last is None or j - last > 2):
+                occ += 1
+            last = j
+        raw.append(min(occ, 3))
+    return [sorted(raw[max(0, i - 1):i + 2])[len(raw[max(0, i - 1):i + 2]) // 2] if 0 < i < n_lines - 1 else raw[i]
+            for i in range(n_lines)]
+
+
+def vocal_blocks(lines, bar_len):
+    """Linjer -> blokker. En linje regnes som «gjentatt» hvis den har en sekvens på 4 ord som
+    også finnes et annet sted i låta (tåler at Whisper deler linjene ulikt og hører litt ulikt
+    fra gang til gang). Blokker skilles der sangen går mellom gjentatte og unike linjer, og ved
+    lange pauser. Enkeltlinjer slås sammen med naboen."""
+    flat, owner = [], []
+    for li, ln in enumerate(lines):
+        for w in ln:
+            t = re.sub(r"[^\wæøå']", "", w["text"].lower())
+            if t:
+                flat.append(t)
+                owner.append(li)
+    count = repeat_counts(flat, owner, len(lines))
+    rep = [c >= 2 for c in count]
+    for i, ln in enumerate(lines):                   # korte linjer («Hei!») arver fra linja før
+        if len(norm_text(ln)) < 3 and i:
+            rep[i] = rep[i - 1]
     blocks, cur = [], []
     for i, ln in enumerate(lines):
         if cur:
             gap = ln[0]["start"] - cur[-1][-1]["end"]
-            if gap > max(4.0, 2 * bar_len) or rep[i] != rep[i - 1]:
+            level = lambda k: min(count[k], 3) if rep[k] else 0      # 0 = unik, 2 = 2 ganger, 3 = 3+
+            steady = all(level(k) == level(i) for k in range(i, min(i + 3, len(lines))))
+            if gap > max(4.0, 2 * bar_len) or rep[i] != rep[i - 1] or \
+               (rep[i] and level(i) != level(i - 1) and len(cur) >= 2 and steady):
                 blocks.append(cur)
                 cur = []
         cur.append(ln)
     if cur:
         blocks.append(cur)
-    # enkeltlinjer blir ikke egne deler: slå sammen med delen før (eller etter)
     tidy = []
     for b in blocks:
         if tidy and len(b) < 2 and b[0][0]["start"] - tidy[-1][-1][-1]["end"] < max(4.0, 2 * bar_len):
@@ -208,39 +256,90 @@ def vocal_blocks(lines, bar_len):
     if len(tidy) > 1 and len(tidy[0]) < 2:
         tidy[1] = tidy[0] + tidy[1]
         tidy.pop(0)
-    blocks = tidy
+    idx = {id(ln): i for i, ln in enumerate(lines)}
     return [{"start": b[0][0]["start"], "end": b[-1][-1]["end"],
              "words": [w for ln in b for w in ln],
-             "cue": " ".join(w["text"] for w in b[0][:6])} for b in blocks]
+             "rep": max(count[idx[id(ln)]] for ln in b),
+             "cue": " ".join(w["text"] for w in b[0][:6])} for b in tidy]
 
 
-def label_blocks(blocks):
-    """Grupper blokker med lik tekst. Gruppa som gjentas mest = refreng; andre grupper er
-    vers (samme tekst = samme nummer). Like naboer slås sammen."""
+# Navn på delene – følger låtas språk (engelske låter får Verse/Chorus/Bridge)
+LABELS = {
+    "no": {"verse": "Vers", "chorus": "Refreng", "bridge": "Bro", "pre": "Pre-refreng", "intro": "Intro", "outro": "Outro",
+           "interlude": "Mellomspill", "solo": "Solo / instrumental", "chords": "Akkorder"},
+    "en": {"verse": "Verse", "chorus": "Chorus", "bridge": "Bridge", "pre": "Pre-Chorus", "intro": "Intro", "outro": "Outro",
+           "interlude": "Interlude", "solo": "Solo / Instrumental", "chords": "Chords"},
+}
+EN_WORDS = {"the", "and", "you", "i", "is", "to", "of", "my", "your", "a", "in", "it", "me", "we", "be",
+            "will", "with", "that", "this", "for", "on", "are", "love", "all", "so", "i'm", "i'll"}
+NO_WORDS = {"og", "jeg", "er", "du", "det", "på", "i", "en", "et", "som", "til", "har", "meg", "deg",
+            "ikke", "han", "hun", "vi", "min", "din", "med", "for", "av", "den", "kan", "skal", "vil"}
+
+
+def song_lang(words):
+    """'en' hvis teksten er engelsk, ellers 'no' (enkel ordtelling – godt nok for titlene)."""
+    toks = [re.sub(r"[^\wæøå']", "", w["text"].lower()) for w in words]
+    en = sum(t in EN_WORDS for t in toks)
+    no = sum(t in NO_WORDS for t in toks)
+    return "en" if en > no else "no"
+
+
+def label_blocks(blocks, lang="no"):
+    """Grupper blokker med lik tekst. Gruppa som gjentas mest = refreng; en del som bare kommer
+    én gang, etter minst to refrenger, = bro/bridge; resten vers (samme tekst = samme nummer).
+    Like naboer slås sammen. Hver blokk får «kind» (verse/chorus/bridge) og «label»."""
+    L = LABELS.get(lang, LABELS["no"])
     texts = [norm_text(b["words"]) for b in blocks]
+    grams = [{tuple(t[k:k + 4]) for k in range(len(t) - 3)} for t in texts]
+
+    def alike(i, j):                       # delte 4-ordsekvenser tåler ulik linjedeling/hørefeil
+        if grams[i] and grams[j]:
+            return len(grams[i] & grams[j]) / min(len(grams[i]), len(grams[j])) >= 0.5
+        return _sim(texts[i], texts[j]) >= 0.55
     group = list(range(len(blocks)))
     for i in range(len(blocks)):
         for j in range(i):
-            if group[j] == j and _sim(texts[i], texts[j]) >= 0.55:
+            if group[j] == j and alike(i, j):
                 group[i] = j
                 break
-    sizes = {}
-    for g in group:
-        sizes[g] = sizes.get(g, 0) + 1
-    chorus = max((g for g in sizes if sizes[g] >= 2),
-                 key=lambda g: (sizes[g], len(texts[g])), default=None)
-    names, verse = {}, 0
+    sizes = {}                             # forekomster (to like blokker på rad = én forekomst)
+    for k, g in enumerate(group):
+        if k == 0 or group[k - 1] != g:
+            sizes[g] = sizes.get(g, 0) + 1
+    # refrenget: den gjentatte gruppa med flest forekomster (og mest tekst)
+    reps = {g for g in sizes if sizes[g] >= 2}
+    weight = {g: sum(b.get("rep", 1) for b, x in zip(blocks, group) if x == g) for g in reps}
+    chorus = max(reps, key=lambda g: (weight[g], sizes[g], len(texts[g])), default=None)
+    # pre-refreng: annen gjentatt gruppe som (nesten) alltid kommer rett før refrenget
+    pre = None
+    for g in reps - {chorus}:
+        idxs = [i for i, x in enumerate(group) if x == g]
+        before = sum(1 for i in idxs if i + 1 < len(group) and group[i + 1] == chorus)
+        if before >= max(2, len(idxs) - 1):
+            pre = g
+            break
+    names, verse, choruses = {}, 0, 0
     for b, g in zip(blocks, group):
         if g == chorus:
-            b["label"] = "Refreng"
+            b["kind"], b["label"] = "chorus", L["chorus"]
+            choruses += 1
+        elif g == pre:
+            b["kind"], b["label"] = "verse", L["pre"]
+        elif sizes[g] == 1 and choruses >= 2 and verse >= 2 and g not in names:
+            b["kind"], b["label"] = "bridge", L["bridge"]
+            names[g] = b["label"]
         else:
             if g not in names:
                 verse += 1
-                names[g] = f"Vers {verse}"
-            b["label"] = names[g]
+                names[g] = f"{L['verse']} {verse}"
+            b["kind"], b["label"] = "verse", names[g]
+    def restarts(prev, b):                 # delen begynner på nytt (f.eks. siste refreng etter et break)
+        a, c = norm_text(prev["words"][:8]), norm_text(b["words"][:8])
+        return b["start"] - prev["end"] >= 3 and len(a) >= 4 and _sim(a, c) >= 0.6
+
     merged = []
     for b in blocks:
-        if merged and merged[-1]["label"] == b["label"]:
+        if merged and merged[-1]["label"] == b["label"] and not restarts(merged[-1], b):
             merged[-1]["end"] = b["end"]
             merged[-1]["words"] += b["words"]
         else:
@@ -248,7 +347,8 @@ def label_blocks(blocks):
     return merged
 
 
-def make_sections(blocks, bars):
+def make_sections(blocks, bars, lang="no"):
+    L = LABELS.get(lang, LABELS["no"])
     starts = [b["start"] for b in bars]
     bar_len = _median([b["end"] - b["start"] for b in bars])
 
@@ -263,7 +363,7 @@ def make_sections(blocks, bars):
         sb = max(first_bar(blk["start"]), pos)
         if sb - pos >= 4 or (k == 0 and sb > pos):
             secs = bars[sb - 1]["end"] - bars[pos]["start"]
-            label = "Intro" if k == 0 else ("Solo / instrumental" if secs >= 20 else "Mellomspill")
+            label = L["intro"] if k == 0 else (L["solo"] if secs >= 20 else L["interlude"])
             sections.append({"label": label, "a": pos, "b": sb, "cue": ""})
         elif sections:                      # én takt mellom deler hører til forrige del
             sections[-1]["b"] = sb
@@ -274,13 +374,13 @@ def make_sections(blocks, bars):
         pos = eb
     if pos < len(bars):
         if len(bars) - pos >= 2 or not sections:
-            sections.append({"label": "Outro", "a": pos, "b": len(bars), "cue": ""})
+            sections.append({"label": L["outro"], "a": pos, "b": len(bars), "cue": ""})
         else:
             sections[-1]["b"] = len(bars)
     return sections
 
 
-def make_chart(y, sr, words, lines, chords, title=None, artist=None, key=None):
+def make_chart(y, sr, words, lines, chords, title=None, artist=None, key=None, lang=None):
     """-> ChordPro-tekst med grid-seksjoner (band-blekke)."""
     if not chords:
         return None
@@ -297,9 +397,10 @@ def make_chart(y, sr, words, lines, chords, title=None, artist=None, key=None):
         cells.pop(); bars.pop()
     if not bars:
         return None
-    blocks = label_blocks(vocal_blocks(lines, n * period)) if lines else []
-    sections = make_sections(blocks, bars) if blocks else \
-        [{"label": "Akkorder", "a": 0, "b": len(bars), "cue": ""}]
+    lang = lang or (song_lang(words) if words else "no")
+    blocks = label_blocks(vocal_blocks(lines, n * period), lang) if lines else []
+    sections = make_sections(blocks, bars, lang) if blocks else \
+        [{"label": LABELS[lang]["chords"], "a": 0, "b": len(bars), "cue": ""}]
 
     # like deler rett etter hverandre -> én del xN
     merged = []
