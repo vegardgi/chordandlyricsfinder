@@ -52,7 +52,9 @@ Lukker du siden, slettes lydfila og akkordarket etter 20 sekunder, og alt slette
 lagres (i Modal-volumet `akkord-models`).
 
 ```bash
-pip install modal
+brew install uv                               # Mac; se docs.astral.sh/uv for andre systemer
+uv tool install --python 3.12 modal           # Modal-CLI i eget miljø (ingen pip nødvendig)
+uv tool update-shell                          # så «modal» finnes i PATH – åpne ny terminal etterpå
 modal setup                                   # logg inn (én gang)
 modal run modal_app.py::download_models       # legg modellene i volumet (én gang, ~5 GB)
 modal serve modal_app.py                      # test på en midlertidig URL
