@@ -108,6 +108,14 @@
   .staged-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; }
   .staged-actions .summary { color: var(--muted); font-size: 14px; }
   #start { min-height: 52px; padding: 0 34px; font-size: 18px; }
+  .dots { display: inline-flex; gap: 1px; margin-left: 2px; }
+  .dots i { font-style: normal; }
+  @media (prefers-reduced-motion: no-preference) {
+    .dots i { animation: blink 1.2s infinite; opacity: .2; }
+    .dots i:nth-child(2) { animation-delay: .2s; }
+    .dots i:nth-child(3) { animation-delay: .4s; }
+  }
+  @keyframes blink { 0%, 100% { opacity: .2; } 30% { opacity: 1; } }
   #banner { display: none; padding: 12px 18px; border-radius: 16px; background: var(--danger-soft); color: var(--danger); font-size: 15px; }
   #banner.show { display: block; }
 
@@ -886,7 +894,7 @@ function renderStaged() {
   const what = { both: "tekst og akkorder", lyrics: "kun tekst", chords: "kun akkorder" }[whatSel.value];
   $("#staged-summary").textContent = starting ? "" :
     `Lager ${what}${whatSel.value === "chords" ? "" : ` · ${LANGS[langSel.value]} · ${isGrundig() ? "Grundig" : "Rask"}`}`;
-  $("#start").textContent = staged.length > 1 ? `Start ${staged.length} låter` : "Start";
+  if (!starting) $("#start").textContent = staged.length > 1 ? `Start ${staged.length} låter` : "Start";
   $("#start").disabled = starting;
   $("#clear").disabled = starting;
 }
@@ -897,7 +905,8 @@ $("#start").onclick = async () => {
   const todo = staged.slice();
   for (let i = 0; i < todo.length; i++) {
     const f = todo[i].file;
-    $("#start").textContent = todo.length > 1 ? `Laster opp ${i + 1} av ${todo.length} …` : "Laster opp …";
+    $("#start").innerHTML = (todo.length > 1 ? `Laster opp ${i + 1} av ${todo.length}` : "Laster opp") +
+      `<span class="dots" aria-hidden="true"><i>.</i><i>.</i><i>.</i></span>`;
     const fd = new FormData();
     fd.append("file", f);
     fd.append("lang", langSel.value);
