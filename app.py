@@ -16,6 +16,7 @@ import urllib.request, webbrowser
 
 from fastapi import Body, FastAPI, File, Form, HTTPException, Request, UploadFile
 from fastapi.responses import FileResponse, HTMLResponse, PlainTextResponse
+from fastapi.staticfiles import StaticFiles
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 ONLINE = os.environ.get("AKKORD_ONLINE") == "1"
@@ -40,6 +41,7 @@ if not ONLINE:
     os.makedirs(OUT_DIR, exist_ok=True)
 
 app = FastAPI(title="Akkordverktøy")
+app.mount("/static", StaticFiles(directory=os.path.join(HERE, "static")), name="static")   # skrifter (selvhostet)
 jobs = {}            # id -> dict
 order = []           # eldste først
 sessions = {}        # økt-id -> {"seen": tid, "leaving": tid | None}  (bare på nett)
@@ -62,6 +64,8 @@ def classify(line):
         return "text", "gjenbruker" in body
     if body.startswith("Akkorder"):
         return "chords", "gjenbruker" in body
+    if body.startswith("Akkordark"):
+        return "chords", False
     if body.startswith("Skrev"):
         return "done", False
     return None, False
@@ -116,6 +120,7 @@ def public(j):
     d = {k: j.get(k) for k in META_KEYS if k != "audio"}
     d["detail"] = j.get("detail", "")
     d["cho"] = j.get("cho")
+    d["chart"] = j.get("chart")
     if j.get("status") in ("error", "cancelled"):
         d["log"] = j.get("log") or ""
     if j.get("status") == "queued":           # plass i den felles køen
@@ -288,12 +293,18 @@ def run_job_local(jid):
     if p.returncode == 0 and os.path.exists(cho_path):
         with open(cho_path, encoding="utf-8") as f:
             cho = f.read()
+        chart = None
+        if os.path.exists(base + ".chart.cho"):
+            with open(base + ".chart.cho", encoding="utf-8") as f:
+                chart = f.read()
         if not ONLINE:
             try:
                 shutil.copyfile(cho_path, os.path.join(OUT_DIR, j["name"] + ".cho"))
+                if chart:
+                    shutil.copyfile(base + ".chart.cho", os.path.join(OUT_DIR, j["name"] + ".chart.cho"))
             except OSError:
                 pass
-        set_job(jid, status="done", stage="Ferdig", progress=1.0, cho=cho, detail="",
+        set_job(jid, status="done", stage="Ferdig", progress=1.0, cho=cho, chart=chart, detail="",
                 finished=time.time(), persist=True)
     else:
         tail = log_tail(j)
@@ -361,6 +372,9 @@ def load_existing():
         if j.get("status") == "done" and os.path.exists(cho):
             with open(cho, encoding="utf-8") as f:
                 j.update(status="done", stage="Ferdig", progress=1.0, cho=f.read())
+            if os.path.exists(out_base(j) + ".chart.cho"):
+                with open(out_base(j) + ".chart.cho", encoding="utf-8") as f:
+                    j["chart"] = f.read()
         elif j.get("status") in ("error", "cancelled"):
             j["log"] = log_tail(j)
         else:
@@ -509,15 +523,17 @@ def save_cho(jid: str, request: Request, body: dict = Body(...)):
     j = get_job(jid, request)
     if j["status"] != "done":
         raise HTTPException(409, "Jobben er ikke ferdig")
-    text = str(body.get("cho", ""))
+    field = "chart" if "chart" in body else "cho"          # tekst-ark eller band-blekke
+    text = str(body.get(field, ""))
     if text and not text.endswith("\n"):
         text += "\n"
-    path = out_base(j) + ".cho"
+    suffix = ".chart.cho" if field == "chart" else ".cho"
+    path = out_base(j) + suffix
     with open(path, "w", encoding="utf-8") as f:
         f.write(text)
     if not ONLINE:
-        shutil.copyfile(path, os.path.join(OUT_DIR, j["name"] + ".cho"))
-    set_job(jid, cho=text)
+        shutil.copyfile(path, os.path.join(OUT_DIR, j["name"] + suffix))
+    set_job(jid, **{field: text})
     return {"ok": True}
 
 
@@ -544,12 +560,12 @@ def retry(jid: str, request: Request, body: dict | None = Body(None)):
         if body.get("lang") in LANGS:
             j["lang"] = body["lang"]
         base = out_base(j)
-        for ext in (".cho", ".words.json"):
+        for ext in (".cho", ".chart.cho", ".words.json"):
             try:
                 os.remove(base + ext)
             except OSError:
                 pass
-        j.update(status="queued", stage="I kø", progress=0.0, error=None, cho=None, log=None,
+        j.update(status="queued", stage="I kø", progress=0.0, error=None, cho=None, chart=None, log=None,
                  detail="", started=None, finished=None, lang_used=None, created=time.time())
         save_meta(j)
         order.remove(jid)

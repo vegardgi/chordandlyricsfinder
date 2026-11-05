@@ -28,10 +28,15 @@ Deretter åpnes appen i nettleseren på <http://localhost:8765>.
   eller **Grundig** (tregere: skiller ut sangstemmen med Demucs først – bedre på låter med fullt band).
   Ferdige Rask-låter har en snarvei: «Ikke bra nok? Prøv Grundig».
 - Låtene kjøres én om gangen i en kø, med steg, fremdrift og tid brukt.
-- Ferdig låt vises med akkordene over teksten, i tre visninger: **Akkordark**,
-  **Akkord over tekst** (ren tekst med akkordlinje over tekstlinje, fast bredde) og **ChordPro**.
-- Knapper: **Kopier ChordPro**, **Kopier akkord over tekst** (for melding/e-post/Word),
-  **Last ned .cho**, **Rediger** (Ctrl/⌘+S lagrer), **Kjør på nytt** med andre valg, **Slett**.
+- Ferdig låt vises i tre visninger: **Tekst med akkorder** (akkordene over ordene), **Akkordark**
+  (band-blekke: Intro/Vers/Refreng/Mellomspill/Outro, taktstreker, én celle per slag, `%` for lik
+  takt, `|: … :| x2` for repetisjoner, taktart og tempo) og **ChordPro**.
+- **Transponer** (− / +, staving etter ny toneart) og **Capo** (med forslag til capo som gir lette grep).
+  Gjelder visning, kopiering, nedlasting og PDF.
+- Knapper: **Kopier tekst med akkorder over** (for melding/e-post/Word), **Kopier ChordPro**,
+  **Kopier akkordark** (ChordPro grid), **Last ned .cho**, **PDF: tekst med akkorder**,
+  **PDF: akkordark** (utskriftsvindu → «Lagre som PDF»), **Rediger** (redigerer visningen du står i;
+  Ctrl/⌘+S lagrer), **Kjør på nytt**, **Slett**.
 - Nederst: lenke til vilkår, opphavsrett og personvern (`/vilkar`).
 - Alle ferdige `.cho`-filer kopieres til mappa `ferdige/` («Åpne mappe med ferdige filer»).
 - Feiler en jobb, vises årsaken og et logg-utdrag, med knapp for å prøve igjen med Rask.
@@ -103,6 +108,7 @@ Filer som lages ved siden av lydfila:
 | `sang.chords.json` | akkorder med start/slutt (sek) |
 | `sang.chords.raw.json` | rå lv-chordia-resultat – gjenbrukes ved neste kjøring |
 | `sang.words.json` | ord med tid – gjenbrukes ved neste kjøring, kan redigeres for hånd |
+| `sang.chart.cho` | band-blekke (ChordPro grid): deler, taktstreker, repetisjoner |
 | `separated/htdemucs/sang/vocals.wav` | utskilt vokal (16 kHz mono) – gjenbrukes |
 
 **Tips:** Rett feil i `sang.words.json` (feilhørte ord) og kjør på nytt. Akkordene flettes inn

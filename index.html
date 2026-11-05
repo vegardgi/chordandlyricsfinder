@@ -3,237 +3,268 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Akkordverktøy</title>
-<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🎸</text></svg>">
+<title>Akkordverktøy – lydfil til akkordark</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%2314213d' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><rect x='0' y='0' width='24' height='24' rx='6' fill='%23ffc83d' stroke='none'/><path d='M10 17V7l8-1.5v9'/><circle cx='8' cy='17' r='2'/><circle cx='16' cy='15.5' r='2'/></svg>">
 <style>
+  @font-face { font-family: "Bricolage Grotesque"; font-style: normal; font-weight: 400 800; font-display: swap;
+               src: url(/static/fonts/bricolage-grotesque-latin.woff2) format("woff2"); }
+  @font-face { font-family: "DM Mono"; font-style: normal; font-weight: 500; font-display: swap;
+               src: url(/static/fonts/dm-mono-500-latin.woff2) format("woff2"); }
   :root {
-    --bg: #f6f5f1;
-    --card: #ffffff;
-    --text: #22231f;
-    --muted: #6d6e66;
-    --line: #e3e1da;
-    --accent: #2f6f62;
-    --accent-soft: #e2efeb;
-    --chord: #b0461e;
-    --danger: #b3261e;
-    --danger-soft: #fbe9e7;
-    --bar: #d9e7e2;
-    --shadow: 0 1px 2px rgba(0,0,0,.04), 0 2px 10px rgba(0,0,0,.04);
+    --bg: #e8eefc; --card: #ffffff; --text: #14213d; --muted: #5a6380; --line: #d7def3;
+    --chip: #e8eefc; --accent: #ffc83d; --on-accent: #14213d; --chord: #2f5bea; --link: #2f5bea;
+    --wave: #d7def3; --wave-on: #2f5bea; --ink: #14213d; --on-ink: #ffffff;
+    --danger: #b3261e; --danger-soft: #fde8e6;
+    --sans: "Bricolage Grotesque", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+    --mono: "DM Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
     color-scheme: light;
   }
   @media (prefers-color-scheme: dark) {
     :root {
-      --bg: #161715;
-      --card: #1f201d;
-      --text: #e9e8e2;
-      --muted: #9a9b92;
-      --line: #33342f;
-      --accent: #7cc4b2;
-      --accent-soft: #23332e;
-      --chord: #f0a37a;
-      --danger: #f2a39b;
-      --danger-soft: #3a2220;
-      --bar: #2b3a35;
-      --shadow: none;
+      --bg: #0e1430; --card: #18203f; --text: #eef2ff; --muted: #a7b1d1; --line: #2a3560;
+      --chip: #222c52; --chord: #9db5ff; --link: #9db5ff; --wave: #2a3560; --wave-on: #9db5ff;
+      --ink: #eef2ff; --on-ink: #14213d; --danger: #ff9b91; --danger-soft: #3a1f2a;
       color-scheme: dark;
     }
   }
   * { box-sizing: border-box; }
   [hidden] { display: none !important; }
   html[data-mode="online"] .local-only, html:not([data-mode="online"]) .online-only { display: none !important; }
-  .notice { margin: 14px 0 0; padding: 10px 14px; border-radius: 10px; background: var(--accent-soft);
-            font-size: 14px; color: var(--text); }
   html, body { margin: 0; background: var(--bg); color: var(--text); }
-  body {
-    font: 15px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, Roboto, sans-serif;
-    -webkit-font-smoothing: antialiased;
-  }
-  main { max-width: 860px; margin: 0 auto; padding: 32px 20px 80px; }
-  header { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin-bottom: 20px; }
-  h1 { font-size: 22px; font-weight: 650; letter-spacing: -.01em; margin: 0; }
-  h1 small { display: block; font-size: 13px; font-weight: 400; color: var(--muted); letter-spacing: 0; }
+  body { font: 16px/1.5 var(--sans); -webkit-font-smoothing: antialiased; }
+  main { max-width: 1040px; margin: 0 auto; padding: 36px 20px 64px; display: flex; flex-direction: column; gap: 22px; }
+  a { color: var(--link); }
+  .sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
 
+  /* knapper */
   button, .btn {
-    font: inherit; font-size: 14px; color: var(--text); background: var(--card);
-    border: 1px solid var(--line); border-radius: 8px; padding: 6px 12px; cursor: pointer;
-    text-decoration: none; display: inline-flex; align-items: center; gap: 6px; white-space: nowrap;
+    font: inherit; font-size: 15px; color: var(--text); background: var(--card);
+    border: 2px solid var(--ink); border-radius: 999px; min-height: 44px; padding: 0 18px; cursor: pointer;
+    text-decoration: none; display: inline-flex; align-items: center; gap: 8px; white-space: nowrap;
   }
-  button:hover, .btn:hover { border-color: var(--muted); }
-  button:focus-visible, .btn:focus-visible, select:focus-visible, input:focus-visible, textarea:focus-visible {
-    outline: 2px solid var(--accent); outline-offset: 2px;
-  }
-  button.primary { background: var(--accent); border-color: var(--accent); color: var(--card); }
-  button.danger { color: var(--danger); }
+  button:hover, .btn:hover { background: var(--chip); }
+  button.primary { background: var(--accent); border-color: var(--accent); color: var(--on-accent); font-weight: 600; }
+  button.primary:hover { filter: brightness(.96); }
+  button.link { border: 0; background: none; padding: 0 4px; color: var(--link); text-decoration: underline; text-underline-offset: 3px; }
   button.quiet { border-color: transparent; background: transparent; color: var(--muted); }
-  button.quiet:hover { color: var(--text); border-color: var(--line); }
-  button:disabled { opacity: .5; cursor: default; }
-
-  .options { display: flex; flex-wrap: wrap; gap: 10px 22px; align-items: center; margin: 0 0 12px; color: var(--muted); font-size: 14px; }
-  .options label { display: inline-flex; align-items: center; gap: 8px; cursor: pointer; }
+  button.quiet:hover { color: var(--text); background: var(--chip); }
+  button.danger { border-color: transparent; background: transparent; color: var(--danger); }
+  button.danger:hover { background: var(--danger-soft); }
+  :is(button, .btn, input, select, textarea):focus-visible { outline: 3px solid var(--chord); outline-offset: 2px; }
   select {
-    font: inherit; font-size: 14px; color: var(--text); background: var(--card);
-    border: 1px solid var(--line); border-radius: 8px; padding: 5px 8px;
+    font: inherit; font-size: 15px; color: var(--text); background: var(--card);
+    border: 2px solid var(--line); border-radius: 12px; padding: 6px 10px; min-height: 40px;
   }
-  input[type=checkbox] { accent-color: var(--accent); width: 16px; height: 16px; margin: 0; }
-  .mode { display: inline-flex; align-items: center; gap: 8px; flex-wrap: wrap; }
-  .mode input[type=range] { width: 64px; accent-color: var(--accent); margin: 0; cursor: pointer; }
-  .mode-end { border: 0; background: none; padding: 4px 2px; color: var(--muted); font-size: 14px; }
-  .mode-end:hover { border: 0; color: var(--text); }
-  .mode-end[aria-pressed="true"] { color: var(--text); font-weight: 600; }
-  .mode-desc { color: var(--muted); font-size: 13px; }
 
-  .drop {
-    border: 2px dashed var(--line); border-radius: 16px; background: var(--card);
-    padding: 54px 24px; text-align: center; cursor: pointer; transition: border-color .15s, background .15s;
-  }
-  .drop:hover, .drop.over { border-color: var(--accent); background: var(--accent-soft); }
-  .drop .big { font-size: 18px; font-weight: 600; margin: 8px 0 4px; }
-  .drop .small { color: var(--muted); font-size: 14px; }
-  .drop svg { color: var(--accent); }
+  /* opplasting */
+  .drop { background: var(--card); border-radius: 28px; padding: 40px 28px 34px; display: flex; flex-direction: column;
+          align-items: center; gap: 14px; text-align: center; cursor: pointer; border: 3px dashed transparent;
+          transition: border-color .15s, background .15s; }
+  .drop.over { border-color: var(--chord); background: var(--chip); }
+  .hero-wave { display: flex; align-items: center; gap: 5px; height: 72px; }
+  .hero-wave span { width: 6px; border-radius: 3px; background: var(--ink); }
+  .hero-wave span.hi { background: var(--accent); }
+  h1 { margin: 0; font-weight: 800; font-size: clamp(28px, 5vw, 40px); line-height: 1.1; letter-spacing: -.02em; }
+  .lead { margin: 0; font-size: 17px; color: var(--muted); }
+  #pick { min-height: 52px; padding: 0 30px; font-size: 17px; }
+  .drop .small { margin: 0; font-size: 14px; color: var(--muted); }
 
-  #overlay {
-    position: fixed; inset: 0; background: color-mix(in srgb, var(--accent) 14%, transparent);
-    border: 3px dashed var(--accent); display: none; align-items: center; justify-content: center;
-    font-size: 22px; font-weight: 600; color: var(--accent); z-index: 50; pointer-events: none;
-    backdrop-filter: blur(2px);
-  }
+  #overlay { position: fixed; inset: 0; z-index: 50; pointer-events: none; display: none; align-items: center; justify-content: center;
+             background: color-mix(in srgb, var(--bg) 82%, transparent); border: 4px dashed var(--chord);
+             font-size: 26px; font-weight: 800; color: var(--text); backdrop-filter: blur(3px); }
   #overlay.show { display: flex; }
 
-  #banner { display: none; margin: 16px 0 0; padding: 10px 14px; border-radius: 10px;
-            background: var(--danger-soft); color: var(--danger); font-size: 14px; }
+  /* valg */
+  .options { display: flex; flex-wrap: wrap; gap: 12px; justify-content: center; align-items: center; }
+  .pills { display: flex; flex-wrap: wrap; gap: 4px; background: var(--card); padding: 6px; border-radius: 999px; border: 0; margin: 0; }
+  .pills label { position: relative; }
+  .pills input { position: absolute; opacity: 0; inset: 0; margin: 0; cursor: pointer; }
+  .pills span { display: inline-flex; align-items: center; min-height: 44px; padding: 0 16px; border-radius: 999px; font-size: 15px; cursor: pointer; }
+  .pills label:hover span { background: var(--chip); }
+  .pills input:checked + span { background: var(--ink); color: var(--on-ink); font-weight: 600; }
+  .pills input:focus-visible + span { outline: 3px solid var(--chord); outline-offset: 2px; }
+  .mode { display: flex; align-items: center; gap: 6px; background: var(--card); padding: 6px 14px; border-radius: 999px; min-height: 56px; }
+  .mode input[type=range] { width: 64px; accent-color: var(--chord); margin: 0 4px; cursor: pointer; }
+  .mode-end { border: 0; background: none; min-height: 44px; padding: 0 4px; color: var(--muted); font-size: 15px; }
+  .mode-end:hover { background: none; color: var(--text); }
+  .mode-end[aria-pressed="true"] { color: var(--text); font-weight: 600; }
+  .mode-desc { margin: -10px 0 0; text-align: center; font-size: 14px; color: var(--muted); }
+
+  #banner { display: none; padding: 12px 18px; border-radius: 16px; background: var(--danger-soft); color: var(--danger); font-size: 15px; }
   #banner.show { display: block; }
 
-  #jobs { margin-top: 26px; display: flex; flex-direction: column; gap: 12px; }
-  .empty { text-align: center; color: var(--muted); font-size: 14px; padding: 18px 0; }
-
-  .job { background: var(--card); border: 1px solid var(--line); border-radius: 12px; box-shadow: var(--shadow); }
-  .job-head { display: flex; align-items: center; gap: 12px; padding: 14px 16px; }
+  /* jobber */
+  #jobs { display: flex; flex-direction: column; gap: 14px; }
+  .empty { text-align: center; color: var(--muted); font-size: 15px; margin: 6px 0; }
+  .job { background: var(--card); border-radius: 22px; }
+  .job.done, .job.error, .job.cancelled { border-radius: 28px; }
+  .job-head { display: flex; align-items: center; gap: 14px 18px; padding: 16px 22px; flex-wrap: wrap; }
   .job.done .job-head { cursor: pointer; }
-  .job-title { flex: 1; min-width: 0; }
+  .job-title { flex: 1 1 220px; min-width: 0; }
   .job-name { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .job-sub { color: var(--muted); font-size: 13px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .job-time { color: var(--muted); font-size: 13px; font-variant-numeric: tabular-nums; white-space: nowrap; }
-  .dot { width: 9px; height: 9px; border-radius: 50%; background: var(--line); flex: none; }
-  .job.running .dot { background: var(--accent); animation: pulse 1.4s ease-in-out infinite; }
-  .job.done .dot { background: var(--accent); }
-  .job.error .dot { background: var(--danger); }
+  .job-sub { color: var(--muted); font-size: 14px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .job-time { color: var(--muted); font-size: 14px; font-family: var(--mono); white-space: nowrap; }
+  .wave { flex: 2 1 280px; display: flex; align-items: center; gap: 3px; height: 36px; min-width: 160px; }
+  .wave span { flex: 1; border-radius: 2px; background: var(--wave); transition: background .3s; }
+  .wave span.on { background: var(--wave-on); }
+  .job.done .wave, .job.error .wave, .job.cancelled .wave { display: none; }
+  .job.queued .wave span { opacity: .6; }
+  @media (prefers-reduced-motion: no-preference) {
+    .job.running .wave span.on:last-of-type, .job.running .wave span.edge { animation: pulse 1.2s ease-in-out infinite; }
+  }
   @keyframes pulse { 50% { opacity: .35; } }
-  @media (prefers-reduced-motion: reduce) { .job.running .dot { animation: none; } }
 
-  .bar { height: 4px; background: var(--bar); margin: 0 16px 14px; border-radius: 4px; overflow: hidden; }
-  .bar > i { display: block; height: 100%; width: 0; background: var(--accent); border-radius: 4px; transition: width .6s ease; }
-  .job.done .bar, .job.error .bar, .job.cancelled .bar { display: none; }
-
-  .job-body { border-top: 1px solid var(--line); padding: 14px 16px 16px; }
-  .actions { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 14px; }
+  .job-body { padding: 0 32px 30px; display: flex; flex-direction: column; gap: 20px; }
+  .sheet-top { display: flex; justify-content: space-between; align-items: flex-start; gap: 14px; flex-wrap: wrap; }
+  .sheet-top h2 { margin: 0; font-weight: 800; font-size: 30px; line-height: 1.15; letter-spacing: -.01em; }
+  .chips { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
+  .chip { font-size: 13px; padding: 4px 12px; border-radius: 999px; background: var(--chip); }
+  .views { display: flex; gap: 4px; background: var(--chip); padding: 4px; border-radius: 999px; }
+  .views button { border: 0; min-height: 40px; padding: 0 14px; font-size: 14px; background: transparent; }
+  .views button:hover { background: color-mix(in srgb, var(--card) 60%, transparent); }
+  .views button[aria-pressed="true"] { background: var(--card); font-weight: 600; }
+  .actions { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
   .actions .spacer { flex: 1; }
-  .retry-row { display: none; flex-wrap: wrap; gap: 10px 16px; align-items: center; padding: 10px 12px;
-               margin: -4px 0 14px; border-radius: 10px; background: var(--accent-soft); font-size: 14px; }
+  .hint { color: var(--muted); font-size: 13px; margin: -8px 0 0; }
+  .retry-row { display: none; flex-wrap: wrap; gap: 12px 18px; align-items: center; padding: 14px 18px;
+               border-radius: 18px; background: var(--chip); font-size: 15px; }
   .retry-row.show { display: flex; }
   .retry-row label { display: inline-flex; align-items: center; gap: 8px; }
+  .err-msg { color: var(--danger); font-weight: 600; margin: 0; }
+  pre.log { margin: 0; padding: 12px 14px; background: var(--chip); border-radius: 14px; font: 12px/1.5 var(--mono);
+            white-space: pre-wrap; word-break: break-word; max-height: 220px; overflow: auto; color: var(--muted); }
 
-  .err-msg { color: var(--danger); font-weight: 600; margin: 0 0 8px; }
-  pre.log {
-    margin: 0 0 12px; padding: 10px 12px; background: var(--bg); border: 1px solid var(--line); border-radius: 8px;
-    font: 12px/1.5 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; white-space: pre-wrap; word-break: break-word;
-    max-height: 220px; overflow: auto; color: var(--muted);
-  }
-
-  /* ChordPro-visning */
-  .sheet { font-size: 16px; line-height: 1.25; overflow-x: auto; padding-bottom: 4px; }
-  .sheet h2 { font-size: 20px; margin: 0; font-weight: 650; }
-  .sheet .artist { color: var(--muted); margin: 2px 0 0; }
-  .sheet .meta { color: var(--muted); font-size: 13px; margin: 6px 0 0; }
-  .sheet .comment { color: var(--muted); font-style: italic; font-size: 14px; margin: 14px 0 6px; }
-  .sheet .gap { height: 14px; }
-  .sheet .ln { margin: 0 0 6px; white-space: nowrap; }
+  /* akkordark */
+  .sheet { font-size: 20px; line-height: 1.3; overflow-x: auto; padding: 2px; }
+  .sheet .comment { color: var(--muted); font-style: italic; font-size: 15px; margin: 14px 0 6px; }
+  .sheet .gap { height: 16px; }
+  .sheet .ln { margin: 0 0 8px; white-space: nowrap; }
   .sheet .seg { display: inline-flex; flex-direction: column; vertical-align: bottom; }
-  .sheet .c { color: var(--chord); font-weight: 650; font-size: 14px; min-height: 1.3em; padding-right: .45em; white-space: pre; }
+  .sheet .c { color: var(--chord); font-family: var(--mono); font-weight: 500; font-size: 16px; line-height: 1.5;
+              min-height: 1.5em; padding-right: .55em; white-space: pre; }
   .sheet .l { white-space: pre; }
-  .sheet .ln.only-chords .seg { margin-right: .6em; }
+  .sheet .ln.only-chords .seg { margin-right: .5em; }
   .sheet .ln.only-chords .l { display: none; }
   .sheet .ln.no-chords .c { display: none; }
-  .sheet .chorus { border-left: 3px solid var(--accent); padding-left: 12px; margin: 6px 0; }
-  .sheet .header { margin-bottom: 14px; }
+  .sheet .chorus { border-left: 4px solid var(--accent); padding-left: 14px; margin: 6px 0; }
+  pre.plain { margin: 0; padding: 18px 20px; background: var(--chip); border-radius: 18px; overflow-x: auto;
+              font: 15px/1.45 var(--mono); white-space: pre; tab-size: 4; }
+  pre.plain .pc { color: var(--chord); }
+  textarea.editor { width: 100%; min-height: 380px; resize: vertical; padding: 16px; border-radius: 18px; border: 2px solid var(--line);
+                    background: var(--chip); color: var(--text); font: 14px/1.55 var(--mono); tab-size: 4; }
+  .timing { color: var(--muted); font-size: 12px; margin: 0; }
 
-  .timing { color: var(--muted); font-size: 12px; margin: 16px 0 0; }
-  .viewbar { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin: 0 0 14px; }
-  .seg-ctl { display: inline-flex; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; }
-  .seg-ctl button { border: 0; border-radius: 0; background: var(--card); color: var(--muted); padding: 5px 11px; }
-  .seg-ctl button + button { border-left: 1px solid var(--line); }
-  .seg-ctl button[aria-pressed="true"] { background: var(--accent-soft); color: var(--text); font-weight: 600; }
-  pre.plain {
-    margin: 0; padding: 14px 16px; background: var(--bg); border: 1px solid var(--line); border-radius: 8px;
-    font: 14px/1.45 ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
-    white-space: pre; overflow-x: auto; tab-size: 4;
-  }
-  pre.plain .pc { color: var(--chord); font-weight: 650; }
-  .hint { color: var(--muted); font-size: 12px; }
-  textarea.editor {
-    width: 100%; min-height: 380px; resize: vertical; padding: 12px; border-radius: 8px;
-    border: 1px solid var(--line); background: var(--bg); color: var(--text);
-    font: 13px/1.55 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; tab-size: 4;
+  /* transponer / capo */
+  .tools { display: flex; flex-wrap: wrap; gap: 10px 18px; align-items: center; font-size: 15px; }
+  .stepper { display: inline-flex; align-items: center; gap: 4px; background: var(--chip); border-radius: 999px; padding: 4px; }
+  .stepper button { border: 0; width: 40px; min-height: 40px; padding: 0; justify-content: center; font-size: 20px; background: var(--card); }
+  .stepper output { min-width: 64px; text-align: center; font-weight: 600; font-family: var(--mono); font-size: 15px; }
+  .tools label { display: inline-flex; align-items: center; gap: 8px; }
+  .tools select { min-height: 44px; border-radius: 999px; padding: 0 14px; }
+
+  /* band-blekke */
+  .chart { display: flex; flex-direction: column; gap: 18px; }
+  .chart .sec-head { display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap; margin-bottom: 8px; }
+  .chart .sec-label { font-weight: 800; font-size: 15px; padding: 3px 12px; border-radius: 8px; background: var(--ink); color: var(--on-ink); }
+  .chart .cue { color: var(--muted); font-style: italic; font-size: 14px; }
+  .chart .row { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)) 44px; align-items: stretch; }
+  .chart .row + .row { margin-top: 10px; }
+  .chart .bar { position: relative; display: flex; align-items: center; gap: 6px; min-height: 52px; padding: 0 12px;
+                border-left: 2px solid var(--text); font-family: var(--mono); font-size: 18px; }
+  .chart .bar.last { border-right: 2px solid var(--text); }
+  .chart .bar .ch { color: var(--chord); font-weight: 500; white-space: nowrap; }
+  .chart .bar .dot { color: var(--muted); font-size: 14px; }
+  .chart .bar .sim { width: 100%; text-align: center; color: var(--muted); font-size: 22px; }
+  .chart .bar.rs { border-left: 5px double var(--text); padding-left: 18px; }
+  .chart .bar.rs::before, .chart .bar.re::after { content: ":"; position: absolute; top: 50%; transform: translateY(-58%);
+                                                   font-weight: 800; font-size: 22px; color: var(--text); }
+  .chart .bar.rs::before { left: 5px; }
+  .chart .bar.re { border-right: 5px double var(--text); padding-right: 18px; }
+  .chart .bar.re::after { right: 5px; }
+  .chart .times { align-self: center; padding-left: 8px; font-weight: 800; font-family: var(--mono); color: var(--text); }
+  .chart .meta-chips { display: flex; gap: 8px; flex-wrap: wrap; }
+  @media (max-width: 600px) {
+    .chart .row { grid-template-columns: repeat(4, minmax(0, 1fr)) 30px; }
+    .chart .bar { font-size: 14px; padding: 0 5px; min-height: 44px; gap: 3px; }
+    .chart .bar .dot { display: none; }
   }
 
-  #toast { position: fixed; left: 50%; bottom: 24px; transform: translateX(-50%) translateY(20px);
-           background: var(--text); color: var(--bg); padding: 9px 16px; border-radius: 10px; font-size: 14px;
-           opacity: 0; transition: opacity .2s, transform .2s; pointer-events: none; z-index: 60; max-width: 90vw; }
+  /* utskrift / PDF: bare arket */
+  #print-area { display: none; }
+  @media print {
+    @page { margin: 16mm 14mm; }
+    html, body { background: #fff !important; color: #000; }
+    body > *:not(#print-area) { display: none !important; }
+    #print-area .chip { background: none; border: 1px solid #999; }
+    #print-area .chart .row + .row { margin-top: 6pt; }
+    #print-area { display: block; color: #000; font-family: var(--sans); }
+    #print-area h1 { font-size: 24pt; margin: 0 0 4pt; }
+    #print-area .pmeta { font-size: 10.5pt; color: #333; margin: 0 0 14pt; }
+    #print-area .sheet, #print-area .chart { font-size: 13pt; }
+    #print-area .sheet .c, #print-area .chart .ch { color: #000; font-weight: 700; }
+    #print-area .chart .sec-label { background: #000; color: #fff; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+    #print-area .chart .bar, #print-area .chart .bar.last { border-color: #000; min-height: 34pt; }
+    #print-area .chart section, #print-area .sheet .ln { break-inside: avoid; }
+    #print-area .sheet .chorus { border-left-color: #000; }
+    #print-area pre.plain { background: none; padding: 0; font-size: 11pt; }
+    #print-area .pfoot { margin-top: 18pt; font-size: 8.5pt; color: #555; }
+  }
+
+  #toast { position: fixed; left: 50%; bottom: 24px; transform: translateX(-50%) translateY(20px); z-index: 60;
+           background: var(--ink); color: var(--on-ink); padding: 10px 18px; border-radius: 999px; font-size: 15px;
+           opacity: 0; transition: opacity .2s, transform .2s; pointer-events: none; max-width: 90vw; }
   #toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
 
-  footer { margin-top: 36px; color: var(--muted); font-size: 13px; text-align: center; }
-  footer a { color: var(--muted); }
-  footer a:hover { color: var(--text); }
-  .sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
-  @media (max-width: 560px) {
-    header { flex-direction: column; align-items: flex-start; }
-    .drop { padding: 36px 16px; }
+  footer { display: flex; flex-direction: column; align-items: center; gap: 6px; margin-top: 10px;
+           color: var(--muted); font-size: 14px; text-align: center; }
+  footer p { margin: 0; }
+  footer a { color: var(--text); }
+  footer button { border-color: var(--line); font-size: 14px; min-height: 40px; }
+  @media (max-width: 600px) {
+    main { padding: 20px 14px 48px; }
+    .drop { padding: 30px 18px 26px; border-radius: 22px; }
+    .job-body { padding: 0 18px 22px; }
+    .sheet { font-size: 18px; }
   }
 </style>
 </head>
 <body>
 <div id="overlay">Slipp lydfilene her</div>
 <main>
-  <header>
-    <h1>Akkordverktøy <small>Lydfil inn → ChordPro med tekst og akkorder</small></h1>
-    <button id="open-folder" class="local-only" type="button" title="Åpner mappa «ferdige» der alle .cho-filer lagres">
-      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>
-      Åpne mappe med ferdige filer
-    </button>
-  </header>
+  <section class="drop" id="drop" aria-labelledby="drop-title">
+    <div class="hero-wave" id="hero-wave" aria-hidden="true"></div>
+    <h1 id="drop-title">Slipp en låt, få akkordene</h1>
+    <p class="lead">Tekst og akkorder over riktig ord – klart til å kopiere.</p>
+    <button type="button" id="pick" class="primary">Velg lydfil</button>
+    <p class="small">eller dra den hit · mp3, wav, m4a, flac, ogg, aiff · flere filer samtidig</p>
+    <input type="file" id="file" class="sr" tabindex="-1" multiple accept="audio/*,.mp3,.wav,.m4a,.flac,.ogg,.aac,.aiff,.aif,.opus">
+  </section>
 
   <div class="options">
-    <label>Språk
-      <select id="lang">
-        <option value="auto">Auto</option>
-        <option value="no">Bokmål</option>
-        <option value="nn">Nynorsk</option>
-        <option value="en">Engelsk</option>
-      </select>
-    </label>
+    <fieldset class="pills" aria-label="Språk">
+      <legend class="sr">Språk</legend>
+      <label><input type="radio" name="lang" value="auto" checked><span>Auto</span></label>
+      <label><input type="radio" name="lang" value="no"><span>Bokmål</span></label>
+      <label><input type="radio" name="lang" value="nn"><span>Nynorsk</span></label>
+      <label><input type="radio" name="lang" value="en"><span>Engelsk</span></label>
+    </fieldset>
     <div class="mode" role="group" aria-label="Fart">
       <button type="button" class="mode-end" data-set="0">Rask</button>
       <input type="range" id="quality" min="0" max="1" step="1" value="0" aria-label="Rask eller grundig">
       <button type="button" class="mode-end" data-set="1">Grundig</button>
-      <span class="mode-desc" id="mode-desc"></span>
     </div>
   </div>
+  <p class="mode-desc" id="mode-desc">Rask gir ofte godt resultat. Grundig er tregere – prøv den hvis Rask ikke ble god nok.</p>
 
-  <div class="drop" id="drop" role="button" tabindex="0" aria-label="Velg eller slipp lydfiler">
-    <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></svg>
-    <div class="big">Slipp lydfiler her</div>
-    <div class="small">eller klikk for å velge · mp3, wav, m4a, flac, ogg, aiff · flere filer samtidig</div>
-    <input type="file" id="file" class="sr" multiple accept="audio/*,.mp3,.wav,.m4a,.flac,.ogg,.aac,.aiff,.aif,.opus">
-  </div>
+  <div id="banner" role="alert"></div>
+  <section id="jobs" aria-live="polite" aria-label="Låter"></section>
 
-  <p class="notice online-only">Ingenting lagres: lydfila og akkordarket slettes når du lukker siden.
-    Kopier eller last ned resultatet før du går.</p>
-  <div id="banner"></div>
-  <section id="jobs" aria-live="polite"></section>
   <footer>
+    <p class="online-only">Ingen konto, ingen lagring. Alt slettes når du lukker siden – kopier eller last ned før du går.</p>
     <p class="local-only">Alt kjører lokalt på maskinen din. Første låt tar lengre tid fordi modellene lastes ned.</p>
-    <p class="online-only">Ingen konto, ingen lagring. Alt slettes når du lukker siden.</p>
     <p>Sangtekster og melodier er vernet av opphavsrett – bruk resultatet til egen øving.
        <a href="/vilkar">Vilkår, opphavsrett og personvern</a></p>
+    <p class="local-only"><button id="open-folder" type="button">Åpne mappe med ferdige filer</button></p>
   </footer>
 </main>
 <div id="toast" role="status"></div>
@@ -242,20 +273,21 @@
 "use strict";
 const AUDIO = ["mp3", "wav", "m4a", "flac", "ogg", "aac", "aiff", "aif", "opus"];
 const LANGS = { auto: "Auto", no: "Bokmål", nn: "Nynorsk", en: "Engelsk" };
-const VIEWS = { sheet: "Akkordark", plain: "Akkord over tekst", chordpro: "ChordPro" };
+const VIEWS = { sheet: "Tekst med akkorder", chart: "Akkordark", chordpro: "ChordPro" };
 let viewPref = "sheet";
 try { const v = localStorage.getItem("akkord-view"); if (v in VIEWS) viewPref = v; } catch (e) {}
 const $ = (s, el = document) => el.querySelector(s);
 const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 
 // ------------------------------------------------------------ innstillinger
-const langSel = $("#lang"), quality = $("#quality");
+const quality = $("#quality");
+const langSel = {                         // språk: radioknapper som piller
+  get value() { return ($('input[name="lang"]:checked') || {}).value || "auto"; },
+  set value(v) { const r = $(`input[name="lang"][value="${v}"]`); if (r) r.checked = true; },
+};
 // Rask = tekst rett fra lydfila. Grundig = skill ut sangstemmen først (Demucs) – tregere, bedre på band.
-const MODE_DESC = ["ofte godt resultat",
-                   "tregere – prøv hvis Rask ikke ble god nok (skiller ut sangstemmen først)"];
 const isGrundig = () => quality.value === "1";
 function showMode() {
-  $("#mode-desc").textContent = MODE_DESC[+quality.value];
   quality.setAttribute("aria-valuetext", isGrundig() ? "Grundig" : "Rask");
   document.querySelectorAll(".mode-end").forEach(b => b.setAttribute("aria-pressed", String(b.dataset.set === quality.value)));
 }
@@ -265,10 +297,17 @@ try {
   if (saved.mode === "grundig") quality.value = "1";
 } catch (e) { /* ingen lagring */ }
 const saveOpts = () => { showMode(); try { localStorage.setItem("akkord-opts", JSON.stringify({ lang: langSel.value, mode: isGrundig() ? "grundig" : "rask" })); } catch (e) {} };
-langSel.onchange = saveOpts;
+document.querySelectorAll('input[name="lang"]').forEach(r => r.onchange = saveOpts);
 quality.oninput = saveOpts;
 document.querySelectorAll(".mode-end").forEach(b => b.onclick = () => { quality.value = b.dataset.set; saveOpts(); });
 showMode();
+
+// ------------------------------------------------------------ bølger (pynt + fremdrift)
+const waveHeights = (n, seed, lo, hi) => Array.from({ length: n }, (_, i) =>
+  lo + Math.round((hi - lo) * Math.abs(Math.sin((i + seed) * 0.71) * Math.cos((i + seed) * 0.23))));
+$("#hero-wave").innerHTML = waveHeights(36, 2, 16, 72)
+  .map((h, i) => `<span${i % 7 === 3 ? ' class="hi"' : ""} style="height:${h}px"></span>`).join("");
+const WAVE_N = 48;
 
 // ------------------------------------------------------------ små hjelpere
 let toastTimer;
@@ -319,12 +358,22 @@ async function copyText(text) {
 }
 
 // ------------------------------------------------------------ ChordPro -> HTML
-function renderChordPro(src) {
+function choMeta(src) {
+  const m = {};
+  for (const line of src.split(/\r?\n/)) {
+    const d = line.match(/^\s*\{\s*([a-zA-Z_]+)\s*:\s*(.*?)\s*\}\s*$/);
+    if (d && !(d[1].toLowerCase() in m)) m[d[1].toLowerCase()] = d[2];
+  }
+  return { title: m.title || m.t || "", artist: m.artist || m.subtitle || m.st || "", key: m.key || "" };
+}
+
+function renderChordPro(src, skipHeader = false) {
   const out = [];
   let header = [], inChorus = false;
   const lines = src.replace(/\r\n?/g, "\n").split("\n");
   const flushHeader = () => {
-    if (header.length) { out.push(`<div class="header">${header.join("")}</div>`); header = []; }
+    if (header.length && !skipHeader) out.push(`<div class="header">${header.join("")}</div>`);
+    header = [];
   };
   for (const raw of lines) {
     const line = raw.replace(/\s+$/, "");
@@ -416,10 +465,118 @@ function plainToHtml(txt) {
   }).join("\n");
 }
 
+// ------------------------------------------------------------ transponer / capo
+const PCS = { C: 0, "B#": 0, "C#": 1, Db: 1, D: 2, "D#": 3, Eb: 3, E: 4, Fb: 4, F: 5, "E#": 5, "F#": 6, Gb: 6,
+              G: 7, "G#": 8, Ab: 8, A: 9, "A#": 10, Bb: 10, B: 11, Cb: 11 };
+const N_FLAT = "C Db D Eb E F Gb G Ab A Bb B".split(" ");
+const N_SHARP = "C C# D D# E F F# G G# A Bb B".split(" ");
+const N_MIXED = "C C# D Eb E F F# G Ab A Bb B".split(" ");
+const FLAT_MAJ = new Set([5, 10, 3, 8, 1]), SHARP_MAJ = new Set([7, 2, 9, 4, 11, 6]);
+const mod12 = n => ((n % 12) + 12) % 12;
+function parseKey(k) {
+  const m = (k || "").trim().match(/^([A-G][#b]?)(m(?!aj))?/);
+  return m && m[1] in PCS ? { pc: PCS[m[1]], minor: !!m[2] } : null;
+}
+function namesForKey(k) {                       // staving etter toneart (Db/Gb eller C#/F#)
+  if (!k) return N_MIXED;
+  const major = k.minor ? mod12(k.pc + 3) : k.pc;
+  return FLAT_MAJ.has(major) ? N_FLAT : SHARP_MAJ.has(major) ? N_SHARP : N_MIXED;
+}
+function keyName(k) { const nm = namesForKey(k); return nm[k.pc] + (k.minor ? "m" : ""); }
+const shiftKey = (k, n) => k && { pc: mod12(k.pc + n), minor: k.minor };
+function transChord(ch, n, names) {
+  const m = ch.match(/^([A-G][#b]?)([^/]*)(?:\/([A-G][#b]?))?$/);
+  if (!m || !(m[1] in PCS)) return ch;
+  return names[mod12(PCS[m[1]] + n)] + m[2] + (m[3] && m[3] in PCS ? "/" + names[mod12(PCS[m[3]] + n)] : "");
+}
+// Skriv om ChordPro: akkordene blir grep (transponert - capo), {key} er klingende toneart.
+function transformCho(src, shift, capo) {
+  if (!src || (!shift && !capo)) return src || "";
+  const k = parseKey(choMeta(src).key);
+  const n = shift - capo, sound = shiftKey(k, shift), shape = shiftKey(k, n);
+  const names = namesForKey(shape);
+  let out = src.split("\n").map(line => {
+    if (/^\s*\{\s*capo\s*:/i.test(line)) return null;
+    if (/^\s*\{\s*key\s*:/i.test(line) && sound) return `{key: ${keyName(sound)}}` + (capo ? `\n{capo: ${capo}}` : "");
+    if (/^\s*\|/.test(line))                                    // grid-linje i blekka
+      return line.replace(/(^|\s)([A-G][#b]?[^\s|]*)/g, (m, sp, c) => sp + transChord(c, n, names));
+    return line.replace(/\[([^\]]+)\]/g, (_, c) => `[${transChord(c, n, names)}]`);
+  }).filter(l => l !== null).join("\n");
+  if (capo && !/\{\s*capo\s*:/i.test(out)) out = out.replace(/(\{title:[^}]*\})/, `$1\n{capo: ${capo}}`);
+  return out;
+}
+const EASY = new Set(["C", "G", "D", "A", "E", "Am", "Em", "Dm"]);
+function capoHint(keyStr, shift) {               // laveste capo som gir lette grep
+  const k = shiftKey(parseKey(keyStr), shift);
+  if (!k || EASY.has(keyName(k))) return null;
+  for (let c = 1; c <= 7; c++) {
+    const shape = shiftKey(k, -c);
+    if (EASY.has(keyName(shape))) return { capo: c, shape: keyName(shape) };
+  }
+  return null;
+}
+
+// ------------------------------------------------------------ band-blekke (ChordPro grid) -> HTML
+function renderChart(src) {
+  const out = [], head = [];
+  let inGrid = false, label = "", cue = "", rows = [];
+  const flush = () => {
+    out.push(`<section><div class="sec-head"><span class="sec-label">${esc(label)}</span>${cue ? `<span class="cue">${esc(cue)}</span>` : ""}</div>${rows.join("")}</section>`);
+    rows = []; cue = "";
+  };
+  for (const raw of src.replace(/\r\n?/g, "\n").split("\n")) {
+    const line = raw.trim();
+    const d = line.match(/^\{\s*([a-zA-Z_]+)\s*(?::\s*(.*?))?\s*\}$/);
+    if (d) {
+      const key = d[1].toLowerCase(), val = d[2] || "";
+      if (key === "time") head.push(`<span class="chip">${esc(val)}</span>`);
+      else if (key === "tempo") head.push(`<span class="chip">♩ = ${esc(val)}</span>`);
+      else if (key === "capo") head.push(`<span class="chip">Capo ${esc(val)}</span>`);
+      else if (["comment", "c"].includes(key) && !/^Band-blekke/.test(val)) cue = val;
+      else if (key === "start_of_grid" || key === "sog") { inGrid = true; label = (val.match(/label="([^"]*)"/) || [, val])[1] || "Del"; }
+      else if (key === "end_of_grid" || key === "eog") { inGrid = false; flush(); }
+      continue;
+    }
+    if (!inGrid || !line.startsWith("|")) continue;
+    const times = (line.match(/:\|\s*x(\d+)\s*$/) || [])[1];
+    const body = line.replace(/\s*x\d+\s*$/, "");
+    const repStart = body.startsWith("|:"), repEnd = /:\|$/.test(body);
+    const bars = body.replace(/^\|:?/, "").replace(/:?\|$/, "").split("|").map(b => b.trim());
+    const cells = bars.map((b, i) => {
+      const cls = ["bar", i === 0 && repStart ? "rs" : "", i === bars.length - 1 ? (repEnd ? "re" : "last") : ""].join(" ");
+      const inner = b === "%" ? `<span class="sim" aria-label="som forrige takt">%</span>`
+        : b.split(/\s+/).map(t => t === "." ? `<span class="dot">·</span>` : `<span class="ch">${esc(t)}</span>`).join("");
+      return `<div class="${cls}">${inner}</div>`;
+    });
+    while (cells.length < 4) cells.push("<div></div>");
+    rows.push(`<div class="row">${cells.join("")}<span class="times">${times ? "x" + times : ""}</span></div>`);
+  }
+  if (inGrid) flush();
+  return `<div class="chart">${head.length ? `<div class="meta-chips">${head.join("")}</div>` : ""}${out.join("")}</div>`;
+}
+
+// ------------------------------------------------------------ PDF / utskrift
+function printSheet(title, metaLine, html) {
+  let area = $("#print-area");
+  if (!area) { area = document.createElement("div"); area.id = "print-area"; document.body.appendChild(area); }
+  area.innerHTML = `<h1>${esc(title)}</h1><p class="pmeta">${esc(metaLine)}</p>${html}
+    <p class="pfoot">Auto-generert med Akkordverktøy – sjekk på øret. Sangtekst og musikk tilhører opphavspersonene.</p>`;
+  const prevTitle = document.title;
+  document.title = title;                       // blir filnavnet når man lagrer som PDF
+  window.addEventListener("afterprint", () => { document.title = prevTitle; area.innerHTML = ""; }, { once: true });
+  window.print();
+}
+function download(name, text) {
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(new Blob([text], { type: "text/plain;charset=utf-8" }));
+  a.download = name; document.body.appendChild(a); a.click();
+  setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 1000);
+}
+
 // ------------------------------------------------------------ opplasting
 const drop = $("#drop"), fileInput = $("#file");
-drop.onclick = () => fileInput.click();
-drop.onkeydown = e => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); fileInput.click(); } };
+drop.onclick = e => { if (!e.target.closest("button")) fileInput.click(); };
+$("#pick").onclick = () => fileInput.click();
 fileInput.onchange = () => { upload([...fileInput.files]); fileInput.value = ""; };
 
 let dragDepth = 0;
@@ -485,12 +642,13 @@ function makeCard(j) {
   el.className = "job";
   el.innerHTML = `
     <div class="job-head">
-      <span class="dot" aria-hidden="true"></span>
       <div class="job-title"><div class="job-name"></div><div class="job-sub"></div></div>
+      <div class="wave" role="progressbar" aria-label="Fremdrift" aria-valuemin="0" aria-valuemax="100">
+        ${waveHeights(WAVE_N, j.name.length, 8, 34).map(h => `<span style="height:${h}px"></span>`).join("")}
+      </div>
       <span class="job-time"></span>
-      <button class="quiet cancel" type="button" title="Avbryt">Avbryt</button>
+      <button class="quiet cancel" type="button">Avbryt</button>
     </div>
-    <div class="bar"><i></i></div>
     <div class="job-body" hidden></div>`;
   const state = { editing: false, retryOpen: false, renderedKey: null };
   $(".job-name", el).textContent = j.name;
@@ -511,21 +669,25 @@ function makeCard(j) {
 function bodyFor(j, state) {
   const body = document.createElement("div");
   if (j.status === "done") {
+    const view = state.view && (state.view !== "chart" || j.chart) ? state.view : (viewPref === "chart" && !j.chart ? "sheet" : viewPref);
+    const editField = view === "chart" ? "chart" : "cho";
     if (state.editing) {
       body.innerHTML = `
         <div class="actions">
           <button class="primary save" type="button">Lagre</button>
-          <button class="cancel-edit" type="button">Avbryt</button>
+          <button class="quiet cancel-edit" type="button">Avbryt</button>
           <span class="spacer"></span>
-          <span class="job-sub">ChordPro: [Akkord] rett foran ordet</span>
+          <span class="job-sub">${editField === "chart"
+            ? "Akkordark: én celle per slag, «.» = samme akkord, «%» = som forrige takt, |: … :| x2 = repetisjon"
+            : "ChordPro: [Akkord] rett foran ordet"}${state.shift || state.capo ? " · redigerer originaltonearten" : ""}</span>
         </div>
-        <textarea class="editor" spellcheck="false"></textarea>`;
+        <textarea class="editor" spellcheck="false" aria-label="Rediger ${editField === "chart" ? "akkordark" : "ChordPro"}"></textarea>`;
       const ta = $("textarea", body);
-      ta.value = j.cho || "";
+      ta.value = j[editField] || "";
       $(".save", body).onclick = async () => {
         try {
-          await api("PUT", `/api/jobs/${j.id}/cho`, { cho: ta.value });
-          j.cho = ta.value; state.editing = false; toast("Lagret");
+          await api("PUT", `/api/jobs/${j.id}/cho`, { [editField]: ta.value });
+          j[editField] = ta.value; state.editing = false; toast("Lagret");
           update(j, true); poll(true);
         } catch (e) { toast("Kunne ikke lagre: " + e.message); }
       };
@@ -537,40 +699,88 @@ function bodyFor(j, state) {
       setTimeout(() => ta.focus(), 0);
       return body;
     }
-    const view = state.view || viewPref;
-    const plain = chordProToText(j.cho || "");
-    const content = view === "sheet" ? `<div class="sheet">${renderChordPro(j.cho || "")}</div>`
-      : view === "plain" ? `<pre class="plain">${plainToHtml(plain)}</pre>`
-      : `<pre class="plain">${esc(j.cho || "")}</pre>`;
+    const shift = state.shift || 0, capo = state.capo || 0;
+    const cho = transformCho(j.cho || "", shift, capo);
+    const chart = j.chart ? transformCho(j.chart, shift, capo) : "";
+    const plain = chordProToText(cho);
+    const meta = choMeta(j.cho || ""), metaNow = choMeta(cho);
+    const origKey = parseKey(meta.key);
+    const soundKey = origKey ? keyName(shiftKey(origKey, shift)) : "";
+    const hint = capoHint(meta.key, shift);
+    const content = view === "chart" ? renderChart(chart)
+      : view === "chordpro" ? `<pre class="plain">${esc(cho)}</pre>`
+      : `<div class="sheet">${renderChordPro(cho, true)}</div>`;
     body.innerHTML = `
-      <div class="actions">
-        <button class="primary copy-cho" type="button" title="ChordPro: [Akkord] rett foran ordet – for OnSong, songbook-apper o.l.">Kopier ChordPro</button>
-        <button class="primary copy-plain" type="button" title="Akkordlinje over tekstlinje – for melding, e-post, Word">Kopier akkord over tekst</button>
-        <a class="btn" href="${withSession(`/api/jobs/${j.id}/cho`)}" download>Last ned .cho</a>
-        <button class="edit" type="button">Rediger</button>
-        <span class="spacer"></span>
-        ${j.separate ? "" : `<button class="try-grundig" type="button" title="Skiller ut sangstemmen før teksten gjenkjennes – tregere, men bedre på låter med fullt band">Ikke bra nok? Prøv Grundig</button>`}
-        <button class="retry" type="button">Kjør på nytt …</button>
-        <button class="danger del" type="button">Slett</button>
+      <div class="sheet-top">
+        <div>
+          <h2>${esc(meta.title || j.name)}</h2>
+          <div class="chips">
+            ${meta.artist ? `<span class="chip">${esc(meta.artist)}</span>` : ""}
+            ${soundKey ? `<span class="chip">Toneart ${esc(soundKey)}</span>` : ""}
+            ${capo ? `<span class="chip">Capo ${capo} – grep som ${esc(metaNow.key ? keyName(shiftKey(parseKey(metaNow.key), -capo)) : "")}</span>` : ""}
+            <span class="chip">${j.separate ? "Grundig" : "Rask"}</span>
+          </div>
+        </div>
+        <div class="views" role="group" aria-label="Visning">
+          ${Object.entries(VIEWS).map(([v, t]) => `<button type="button" data-view="${v}" aria-pressed="${v === view}" ${v === "chart" && !j.chart ? "disabled title=\"Ikke laget for denne låta – kjør på nytt\"" : ""}>${t}</button>`).join("")}
+        </div>
       </div>
-      ${retryRow(j, state)}
-      <div class="viewbar">
-        <span class="seg-ctl" role="group" aria-label="Visning">
-          ${Object.entries(VIEWS).map(([v, t]) => `<button type="button" data-view="${v}" aria-pressed="${v === view}">${t}</button>`).join("")}
+      <div class="tools">
+        <span class="stepper" role="group" aria-label="Transponer">
+          <button type="button" class="t-down" aria-label="Transponer ned et halvtrinn">−</button>
+          <output aria-live="polite">${shift > 0 ? "+" : ""}${shift || "0"}${soundKey ? " · " + esc(soundKey) : ""}</output>
+          <button type="button" class="t-up" aria-label="Transponer opp et halvtrinn">+</button>
         </span>
-        ${view === "plain" ? `<span class="hint">Slik blir teksten når du kopierer. Akkordene står over riktig ord i skrift med fast bredde (f.eks. Courier).</span>` : ""}
+        <label>Capo
+          <select class="capo">${[0, 1, 2, 3, 4, 5, 6, 7].map(c => `<option value="${c}" ${c === capo ? "selected" : ""}>${c ? c : "Ingen"}</option>`).join("")}</select>
+        </label>
+        ${hint && !capo ? `<button type="button" class="link capo-hint">Forslag: capo ${hint.capo} (grep som ${esc(hint.shape)})</button>` : ""}
+        ${shift || capo ? `<button type="button" class="link reset">Tilbake til original</button>` : ""}
       </div>
       ${content}
-      ${j.timing ? `<p class="timing">Tid: ${esc(j.timing)}</p>` : ""}`;
+      <div class="actions">
+        <button class="primary copy-plain" type="button" title="Akkordlinje over tekstlinje – for melding, e-post, Word">Kopier tekst med akkorder over</button>
+        <button class="primary copy-cho" type="button" title="ChordPro: [Akkord] rett foran ordet – for OnSong, songbook-apper o.l.">Kopier ChordPro</button>
+        <button class="primary copy-chart" type="button" ${j.chart ? "" : "disabled"} title="Band-blekke med taktstreker og repetisjoner (ChordPro grid)">Kopier akkordark</button>
+      </div>
+      <div class="actions">
+        <button class="dl" type="button">Last ned .cho</button>
+        <button class="pdf-sheet" type="button" title="Lagre som PDF eller skriv ut – velg «Lagre som PDF» i utskriftsvinduet">PDF: tekst med akkorder</button>
+        <button class="pdf-chart" type="button" ${j.chart ? "" : "disabled"} title="Lagre som PDF eller skriv ut – velg «Lagre som PDF» i utskriftsvinduet">PDF: akkordark</button>
+        <button class="edit" type="button">Rediger</button>
+        <span class="spacer"></span>
+        ${j.separate ? "" : `<button class="link try-grundig" type="button" title="Skiller ut sangstemmen før teksten gjenkjennes – tregere, men bedre på låter med fullt band">Ikke bra nok? Prøv Grundig</button>`}
+      </div>
+      <div class="actions">
+        <button class="quiet retry" type="button">Kjør på nytt …</button>
+        <button class="danger del" type="button">Slett</button>
+        <span class="spacer"></span>
+        ${j.timing ? `<p class="timing">Tid: ${esc(j.timing)}</p>` : ""}
+      </div>
+      ${retryRow(j, state)}`;
     body.querySelectorAll("[data-view]").forEach(b => b.onclick = () => {
       state.view = viewPref = b.dataset.view;
       try { localStorage.setItem("akkord-view", viewPref); } catch (e) {}
       update(j, true);
     });
-    $(".copy-cho", body).onclick = async () =>
-      toast(await copyText(j.cho || "") ? "ChordPro kopiert" : "Kunne ikke kopiere");
+    const setT = (sh, cp) => { state.shift = Math.max(-11, Math.min(11, sh)); state.capo = cp; update(j, true); };
+    $(".t-down", body).onclick = () => setT(shift - 1, capo);
+    $(".t-up", body).onclick = () => setT(shift + 1, capo);
+    $(".capo", body).onchange = e => setT(shift, +e.target.value);
+    const ch = $(".capo-hint", body); if (ch) ch.onclick = () => setT(shift, hint.capo);
+    const rs = $(".reset", body); if (rs) rs.onclick = () => setT(0, 0);
     $(".copy-plain", body).onclick = async () =>
-      toast(await copyText(plain) ? "Akkord over tekst kopiert" : "Kunne ikke kopiere");
+      toast(await copyText(plain) ? "Tekst med akkorder over kopiert" : "Kunne ikke kopiere");
+    $(".copy-cho", body).onclick = async () =>
+      toast(await copyText(cho) ? "ChordPro kopiert" : "Kunne ikke kopiere");
+    $(".copy-chart", body).onclick = async () =>
+      toast(await copyText(chart) ? "Akkordark kopiert" : "Kunne ikke kopiere");
+    $(".dl", body).onclick = () => view === "chart" ? download(`${j.name} (akkordark).cho`, chart) : download(`${j.name}.cho`, cho);
+    const bits = [meta.artist, soundKey && `Toneart ${soundKey}`, capo && `Capo ${capo} (grep som ${metaNow.key ? keyName(shiftKey(parseKey(metaNow.key), -capo)) : ""})`]
+      .filter(Boolean).join(" · ");
+    $(".pdf-sheet", body).onclick = () =>
+      printSheet(meta.title || j.name, bits, `<div class="sheet">${renderChordPro(cho, true)}</div>`);
+    $(".pdf-chart", body).onclick = () => printSheet(`${meta.title || j.name} – akkordark`, bits, renderChart(chart));
     $(".edit", body).onclick = () => { state.editing = true; update(j, true); };
     const tg = $(".try-grundig", body);
     if (tg) tg.onclick = () => retry(j, { separate: true, lang: j.lang });
@@ -580,7 +790,7 @@ function bodyFor(j, state) {
       ${j.log ? `<pre class="log">${esc(j.log)}</pre>` : ""}
       <div class="actions">
         ${j.separate ? `<button class="primary retry-nosep" type="button">Prøv igjen med Rask</button>` : ""}
-        <button class="retry" type="button">Prøv igjen …</button>
+        <button class="quiet retry" type="button">Prøv igjen …</button>
         <span class="spacer"></span>
         <button class="danger del" type="button">Slett</button>
       </div>
@@ -630,14 +840,18 @@ function update(j, force = false) {
   el.className = `job ${j.status}`;
   $(".job-sub", el).textContent = statusLine(j);
   $(".job-time", el).textContent = elapsed(j);
-  $(".bar > i", el).style.width = `${Math.round((j.progress || 0) * 100)}%`;
+  const pct = Math.round((j.progress || 0) * 100), lit = Math.round((j.progress || 0) * WAVE_N);
+  const wave = $(".wave", el);
+  wave.setAttribute("aria-valuenow", String(pct));
+  wave.querySelectorAll("span").forEach((s, i) => { s.classList.toggle("on", i < lit); s.classList.toggle("edge", i === lit); });
   $(".cancel", el).hidden = !(j.status === "running" || j.status === "queued");
 
   const body = $(".job-body", el);
   const show = (j.status === "done" && expanded.has(j.id)) || j.status === "error" || j.status === "cancelled";
   if (!show) { body.hidden = true; body.innerHTML = ""; state.renderedKey = null; return; }
   if (state.editing && !force) return;              // ikke rør teksten mens du redigerer
-  const key = [j.status, j.cho, j.error, j.log, j.timing, state.editing, state.retryOpen, state.view || viewPref, j.lang, j.separate].join("\u0001");
+  const key = [j.status, j.cho, j.chart, j.error, j.log, j.timing, state.editing, state.retryOpen, state.view || viewPref,
+               state.shift, state.capo, j.lang, j.separate].join("\u0001");
   if (key === state.renderedKey && !force) return;
   state.renderedKey = key;
   body.hidden = false;
@@ -667,7 +881,7 @@ function render(list) {
     prev = c.el;
   }
   let empty = $(".empty", jobsEl);
-  if (!list.length && !empty) jobsEl.insertAdjacentHTML("beforeend", `<p class="empty">Ingen låter ennå. Slipp en lydfil over for å starte.</p>`);
+  if (!list.length && !empty) jobsEl.insertAdjacentHTML("beforeend", `<p class="empty">Låtene du laster opp, dukker opp her.</p>`);
   if (list.length && empty) empty.remove();
 }
 

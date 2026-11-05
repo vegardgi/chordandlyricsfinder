@@ -37,6 +37,7 @@ gpu_image = (
     .env(model_env)
     .add_local_file(os.path.join(HERE, "songsheet.py"), f"{APP_DIR}/songsheet.py")
     .add_local_file(os.path.join(HERE, "chords.py"), f"{APP_DIR}/chords.py")
+    .add_local_file(os.path.join(HERE, "chart.py"), f"{APP_DIR}/chart.py")
 )
 
 web_image = (
@@ -46,6 +47,7 @@ web_image = (
     .add_local_file(os.path.join(HERE, "app.py"), f"{APP_DIR}/app.py")
     .add_local_file(os.path.join(HERE, "index.html"), f"{APP_DIR}/index.html")
     .add_local_file(os.path.join(HERE, "vilkar.html"), f"{APP_DIR}/vilkar.html")
+    .add_local_dir(os.path.join(HERE, "static"), f"{APP_DIR}/static")
 )
 
 # ------------------------------------------------------------------ GPU
@@ -96,8 +98,10 @@ def process(audio: bytes, filename: str, lang: str, separate: bool, jid: str) ->
         p.wait()
         cho_path = os.path.splitext(path)[0] + ".cho"
         cho = open(cho_path, encoding="utf-8").read() if os.path.exists(cho_path) else None
+        chart_path = os.path.splitext(path)[0] + ".chart.cho"
+        chart = open(chart_path, encoding="utf-8").read() if os.path.exists(chart_path) else None
     models.commit()                       # nye modellnedlastinger blir liggende til neste gang
-    return {"returncode": p.returncode, "cho": cho, "log": "\n".join(log[-80:])}
+    return {"returncode": p.returncode, "cho": cho, "chart": chart, "log": "\n".join(log[-80:])}
 
 
 @app.function(image=gpu_image, gpu=GPU, volumes={MODELS: models}, timeout=60 * 60)
@@ -174,8 +178,11 @@ def run_job_modal(jid):
     if result["returncode"] == 0 and result["cho"]:
         with open(base + ".cho", "w", encoding="utf-8") as f:
             f.write(result["cho"])
+        if result.get("chart"):
+            with open(base + ".chart.cho", "w", encoding="utf-8") as f:
+                f.write(result["chart"])
         akkord.set_job(jid, status="done", stage="Ferdig", progress=1.0, cho=result["cho"],
-                       detail="", finished=time.time())
+                       chart=result.get("chart"), detail="", finished=time.time())
     else:
         lines = [ln for ln in result["log"].splitlines() if not akkord.NOISE.match(ln)]
         tail = "\n".join(lines[-14:])

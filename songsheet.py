@@ -791,15 +791,29 @@ def main():
     key = estimate_key(raw)                               # staver Db/Gb eller C#/F# etter toneart
     names = FLAT if a.flats else SHARP if a.sharps else names_for_key(key)
     chords = clean(raw, a.min_len, names)
-    timer.lap("akkorder")
     write_json(base + ".chords.json", chords, indent=2)
 
     title, artist = audio_tags(audio)
     title = title or os.path.basename(base)
-    cho = to_chordpro(merge(split_lines(words), chords), title, artist,
-                      a.key or (key_name(key, names) if key else None))
+    key_str = a.key or (key_name(key, names) if key else None)
+    lines = split_lines(words)
+    cho = to_chordpro(merge(lines, chords), title, artist, key_str)
     with open(base + ".cho", "w", encoding="utf-8") as f:
         f.write(cho)
+    timer.lap("akkorder")
+
+    # band-blekke: takter (beat tracking), deler og repetisjoner -> <navn>.chart.cho
+    say("• Akkordark: takter og deler")
+    try:
+        import chart
+        sheet = chart.make_chart(load_audio(audio, 22050, mono=True), 22050, words, lines,
+                                 chords, title, artist, key_str)
+        if sheet:
+            with open(base + ".chart.cho", "w", encoding="utf-8") as f:
+                f.write(sheet)
+    except Exception as e:  # noqa: BLE001 – blekka er et tillegg; teksten er viktigst
+        say(f"! Akkordark feilet ({type(e).__name__}: {e})")
+    timer.lap("akkordark")
     if not a.quiet:
         try:
             print(cho)
