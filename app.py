@@ -47,6 +47,7 @@ app.mount("/static", StaticFiles(directory=os.path.join(HERE, "static")), name="
 jobs = {}            # id -> dict
 order = []           # eldste først
 sessions = {}        # økt-id -> {"seen": tid, "leaving": tid | None}  (bare på nett)
+durations = []       # hvor lenge de siste ferdige jobbene tok (sek) – til ventetidsanslag
 work = queue.Queue()
 lock = threading.RLock()
 
@@ -125,10 +126,24 @@ def public(j):
     d["chart"] = j.get("chart")
     if j.get("status") in ("error", "cancelled"):
         d["log"] = j.get("log") or ""
-    if j.get("status") == "queued":           # plass i den felles køen
-        d["ahead"] = sum(1 for i in order if jobs.get(i, {}).get("status") in ("queued", "running")
-                         and jobs[i]["created"] < j["created"])
+    if j.get("status") == "queued":           # plass i den felles køen + anslått ventetid
+        ahead = [jobs[i] for i in order if jobs.get(i, {}).get("status") in ("queued", "running")
+                 and jobs[i]["created"] < j["created"]]
+        d["ahead"] = len(ahead)
+        typical = typical_duration()
+        left = sum(max(20.0, typical - (time.time() - a["started"])) if a.get("started") else typical
+                   for a in ahead)
+        d["eta"] = round(left / max(1, WORKERS))
+    d["typical"] = round(typical_duration())
     return d
+
+
+def typical_duration():
+    """Typisk tid per låt: median av de siste ferdige jobbene (ellers et forsiktig anslag)."""
+    if durations:
+        xs = sorted(durations[-20:])
+        return xs[len(xs) // 2]
+    return 150.0 if ONLINE else 240.0
 
 
 def set_job(jid, persist=False, **kw):
@@ -208,6 +223,8 @@ class Tracker:
                     self.step, self.inference = key, 0
                     self.at(0)
                 label = STEPS[key][0]
+                if body.startswith("Tekst: leser lyd"):
+                    label, body = "Leser lyd", "Leser lyd"
                 if skipped:
                     label = {"sep": "Gjenbruker vokal", "text": "Gjenbruker tekst",
                              "chords": "Gjenbruker akkorder"}.get(key, label)
@@ -233,7 +250,8 @@ class Tracker:
             self.at(0.15 + 0.85 * (self.inference - 1) / 5)
         else:
             m = DOWNLOAD.search(line)
-            if m and "Loading weights" not in line and "seconds/s" not in line:
+            # «Fetching N files» er bare en sjekk mot lokalt lager, ikke en nedlasting
+            if m and not line.lstrip().startswith(("Fetching", "Loading weights")) and "seconds/s" not in line:
                 set_job(self.jid, detail=f"Laster ned modell (bare første gang) – {m.group(1)} %")
 
 
@@ -372,6 +390,11 @@ def worker():
                 ready = jobs.get(jid, {}).get("status") == "queued"
             if ready:
                 run_job(jid)
+                with lock:
+                    j = jobs.get(jid)
+                    if j and j.get("status") == "done" and j.get("started") and j.get("finished"):
+                        durations.append(j["finished"] - j["started"])
+                        del durations[:-50]
                 if ONLINE:
                     purge_inputs(jid)
         except Exception as e:  # noqa: BLE001

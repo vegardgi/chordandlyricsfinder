@@ -234,6 +234,7 @@
   .pp-head .pmeta { font-size: .82em; color: #444; margin: 0; padding-bottom: 1.1em; }
   .pp-cols { display: flex; gap: 8mm; align-items: flex-start; }
   .pp-col { flex: none; }
+  .pp-col.chart { display: block; gap: 0; }        /* PDF: ingen flex-luft som målingen ikke ser */
   .pp-sheet .ln { display: flex; flex-wrap: wrap; align-items: flex-end; padding-bottom: .3em; }
   .pp-sheet .seg { display: inline-flex; flex-direction: column; }
   .pp-sheet .c { font-family: var(--mono); font-weight: 500; font-size: .84em; line-height: 1.35; min-height: 1.35em;
@@ -706,7 +707,7 @@ function sheetUnits(cho) {
 
 function paginate(doc, cols, scale) {
   const contentW = PG.w - 2 * PG.mx, colW = (contentW - (cols - 1) * PG.gap) / cols;
-  const colH = PG.h - PG.mt - PG.mb;
+  const colH = (PG.h - PG.mt - PG.mb) * 0.97;     // 3 % sikkerhetsmargin (avrunding, nettleserforskjeller)
   const colCls = doc.kind === "chart" ? "pp-col chart" : "pp-col pp-sheet";
   const m = document.createElement("div");
   m.className = "pp-page pp-measure";
@@ -714,10 +715,11 @@ function paginate(doc, cols, scale) {
   m.innerHTML = `<div class="pp-head" style="width:${contentW}px">${doc.head}</div>
     <div class="${colCls}" style="width:${colW}px">${doc.units.map(u => u.map(it => `<div class="pp-it">${it}</div>`).join("")).join("<div class=\"pp-gap\"></div>")}</div>`;
   document.body.appendChild(m);
-  const headH = m.querySelector(".pp-head").getBoundingClientRect().height;
-  const gapEl = m.querySelector(".pp-gap"), gapH = gapEl ? gapEl.getBoundingClientRect().height : 0;
-  const hs = [...m.querySelectorAll(".pp-it")].map(e => e.getBoundingClientRect().height);
+  const headH = Math.ceil(m.querySelector(".pp-head").getBoundingClientRect().height);
+  const gapEl = m.querySelector(".pp-gap"), gapH = gapEl ? Math.ceil(gapEl.getBoundingClientRect().height) : 0;
+  const hs = [...m.querySelectorAll(".pp-it")].map(e => Math.ceil(e.getBoundingClientRect().height));
   m.remove();
+  const wrap = it => `<div class="pp-it">${it}</div>`;   // nøyaktig samme oppbygning som ved måling
   // pakk: hele avsnitt holdes samlet når de får plass, ellers deles de linje for linje
   const pages = [];
   let page, col, used;
@@ -732,14 +734,14 @@ function paginate(doc, cols, scale) {
     const sp = used > 0 ? gapH : 0;
     if (used + sp + uh <= cap()) {
       if (sp) page[col].push(`<div class="pp-gap"></div>`);
-      u.forEach(it => page[col].push(it)); used += sp + uh;
+      u.forEach(it => page[col].push(wrap(it))); used += sp + uh;
     } else if (used > 0 && uh <= cap()) {
-      nextCol(); u.forEach(it => page[col].push(it)); used = uh;
+      nextCol(); u.forEach(it => page[col].push(wrap(it))); used = uh;
     } else {
       if (sp && used + sp < cap()) { page[col].push(`<div class="pp-gap"></div>`); used += sp; }
       u.forEach((it, i) => {
         if (used > 0 && used + h[i] > cap()) nextCol();
-        page[col].push(it); used += h[i];
+        page[col].push(wrap(it)); used += h[i];
       });
     }
     k += u.length;
@@ -1010,8 +1012,20 @@ const WHAT = { both: "", lyrics: "Kun tekst", chords: "Kun akkorder" };
 function statusLine(j) {
   const opts = j.mode === "chords" ? "Kun akkorder"
     : `${WHAT[j.mode] ? WHAT[j.mode] + " · " : ""}${LANGS[j.lang] || j.lang} · ${j.separate ? "Grundig" : "Rask"}`;
-  if (j.status === "queued") return `I kø${j.ahead ? ` (${j.ahead} foran deg)` : ""} · ${opts}`;
-  if (j.status === "running") return `${j.stage}${j.detail ? " – " + j.detail : ""}`;
+  if (j.status === "queued") {
+    const wait = j.ahead ? ` · ${j.ahead} foran deg${j.eta ? ` · ${j.eta < 60 ? "under 1 min" : "ca. " + fmtWait(j.eta)} ventetid` : ""}` : " · starter straks";
+    return `I kø${wait} · ${opts}`;
+  }
+  if (j.status === "running") {
+    const t = j.started ? Date.now() / 1000 - j.started : 0;
+    let extra = "";
+    if (j.stage === "Starter GPU") extra = ` · har ventet ${fmtTime(t)}`;
+    else if ((j.progress || 0) >= 0.25 && t > 15) {        // anslag ut fra ekte fremdrift
+      const left = t * (1 - j.progress) / j.progress;
+      if (left > 5) extra = left < 60 ? " · under 1 min igjen" : ` · ca. ${fmtWait(left)} igjen`;
+    }
+    return `${j.stage}${j.detail ? " – " + j.detail : ""}${extra}`;
+  }
   if (j.status === "done") {
     const used = j.lang_used ? (LANGS[j.lang_used] || j.lang_used) : (LANGS[j.lang] || j.lang);
     if (j.mode === "chords") return "Ferdig · Kun akkorder";
@@ -1020,6 +1034,12 @@ function statusLine(j) {
   if (j.status === "error") return `Feilet · ${j.error || ""}`;
   if (j.status === "cancelled") return "Avbrutt";
   return j.stage || "";
+}
+function fmtWait(s) {
+  s = Math.max(1, Math.round(s));
+  if (s < 60) return "under 1 min";
+  const m = Math.round(s / 60);
+  return m >= 60 ? `${Math.floor(m / 60)} t ${m % 60} min` : `${m} min`;
 }
 function elapsed(j) {
   if (!j.started) return "";
@@ -1352,7 +1372,10 @@ async function poll(now = false) {
 // sekundteller mellom pollene
 setInterval(() => {
   for (const c of cards.values()) {
-    if (c.job.status === "running") $(".job-time", c.el).textContent = elapsed(c.job);
+    if (c.job.status === "running") {
+      $(".job-time", c.el).textContent = elapsed(c.job);
+      $(".job-sub", c.el).textContent = statusLine(c.job);
+    }
     if (c.job.status === "running" || c.job.status === "queued") paintProgress(c);
   }
 }, 1000);
