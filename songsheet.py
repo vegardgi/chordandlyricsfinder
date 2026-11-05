@@ -529,6 +529,61 @@ def merge_windows(clips, per_clip):
     return out
 
 
+# Whisper «finner på» tekst i instrumentale partier og stille slutter. NB-Whisper er trent på
+# NRK-teksting og dikter ofte opp TV-fraser; Whisper generelt «takk for at du så på» o.l.
+HALLUCINATIONS = re.compile(
+    r"likhet med virkelige|virkelige hendelser|hendelser og personer|er tilfeldig\b|"
+    r"teksting|tekstet av|undertekst|norsk tekst|oversatt av|oversettelse|nrk\b|"
+    r"takk for at du (så|lyttet|har sett)|takk for oppmerksomheten|abonner|"
+    r"thanks? for watching|subscribe|subtitles?\b|transcribed by|amara\.org|"
+    r"etterforskning|programmet|episode|sesong \d|vi sees (igjen|neste)|god natt alle|"
+    r"lik og del|følg oss|lyttere|seere|reklame|sponset|"
+    r"www\.|https?://|\.com\b|\.no\b", re.IGNORECASE)
+
+
+def is_hallucination(seg, loud=None):
+    """Segment fra faster-whisper som trolig ikke er sunget. Nulltoleranse: heller miste en
+    usikker linje enn å vise påfunnet tekst. Grensene er satt ut fra målt ekte sang
+    (ekte linjer: no_speech 0,0, ordsikkerhet ≥ 0,50, logprob ≥ −0,95).
+      - kjent TV-/teksting-frase
+      - modellen tror det ikke er tale, eller er usikker (logprob / ordsannsynlighet)
+      - løkke som gjentar seg (høy kompresjon)
+      - nesten stille lyd under segmentet (utfading, pause)"""
+    text = (seg.text or "").strip()
+    if not re.search(r"\w", text):
+        return True
+    if HALLUCINATIONS.search(text):
+        return True
+    if (seg.no_speech_prob or 0) > 0.3:
+        return True
+    if (seg.avg_logprob or 0) < -1.0:
+        return True
+    words = seg.words or []
+    if words and sum(w.probability for w in words) / len(words) < 0.45:
+        return True
+    if (seg.compression_ratio or 0) > 2.4:
+        return True
+    if loud is not None and loud(seg.start, seg.end) < 0.3:
+        return True
+    return False
+
+
+def loudness_gate(y, sr=16000):
+    """-> funksjon(start, slutt) = andel av 50 ms-rammer med lyd over 5 % av låtas sterke partier."""
+    import numpy as np
+    hop = sr // 20
+    n = len(y) // hop
+    if n == 0:
+        return None
+    rms = np.sqrt(np.mean(y[: n * hop].reshape(n, hop) ** 2, axis=1))
+    thr = 0.05 * float(np.percentile(rms, 95))
+
+    def frac(a, b):
+        seg = rms[int(a * 20): max(int(a * 20) + 1, int(b * 20))]
+        return float((seg > thr).mean()) if len(seg) else 0.0
+    return frac
+
+
 def transcribe_fast(y, model, lang, beams, sr=16000):
     """y: 16 kHz mono float32 -> ord med start/slutt. model: navn eller lastet WhisperModel."""
     import faster_whisper.transcribe as fwt
@@ -556,9 +611,15 @@ def transcribe_fast(y, model, lang, beams, sr=16000):
         condition_on_previous_text=False, no_speech_threshold=None,
         log_prob_threshold=None, compression_ratio_threshold=None)[0]
     per_clip = [[] for _ in clips]
+    dropped = []
+    loud = loudness_gate(y, sr)
     for seg in segs:                                       # generator: én batch om gangen
         offset = seg.seek / model.frames_per_second           # vinduets start (sek)
         k = min(range(len(clips)), key=lambda i: abs(clips[i]["start"] - offset))
+        if is_hallucination(seg, loud):
+            dropped.append((round(seg.start), seg.text.strip()))
+            prog(min(seg.end / dur, 0.99))
+            continue
         for w in seg.words or []:
             t = w.word.strip()
             if t:
@@ -566,6 +627,8 @@ def transcribe_fast(y, model, lang, beams, sr=16000):
                                     "end": round(float(w.end), 2), "text": t})
         prog(min(seg.end / dur, 0.99))
     prog(1)
+    for t, text in dropped:
+        say(f"! Fjernet trolig påfunnet tekst ved {t // 60}:{t % 60:02d}: «{text[:80]}»")
     for ws in per_clip:
         ws.sort(key=lambda w: w["start"])
     return repair_words(merge_windows(clips, per_clip))
@@ -641,7 +704,13 @@ def to_chordpro(blocks, title, artist=None, key=None):
     o.append("{comment: Auto-generert (lv-chordia + NB-Whisper) – sjekk på øret}")
     o.append("")
     for b in blocks:
+        if b[0] == "break":                         # ny del i låta (vers/refreng …): tom linje
+            if o and o[-1] != "":
+                o.append("")
+            continue
         if b[0] == "chords":
+            if o and o[-1] != "":                    # instrumentalt parti: egen del
+                o.append("")
             seq = b[1]
             for i in range(0, len(seq), 8):
                 o.append(" ".join(f"[{c}]" for c in seq[i:i + 8]))
@@ -699,6 +768,28 @@ def fast_lyrics(y, a, timer):
     del model
     free_memory()
     return words
+
+def with_section_breaks(blocks, lines):
+    """Sett inn ('break',) foran linjer der en ny del av låta starter (samme inndeling som
+    akkordarket: gjentatte linjer = refreng, ellers vers, og lange pauser)."""
+    if len(lines) < 2:
+        return blocks
+    try:
+        import chart
+        parts = chart.label_blocks(chart.vocal_blocks(lines, 2.0))
+    except Exception:  # noqa: BLE001
+        return blocks
+    first_word = {id(ln[0]): i for i, ln in enumerate(lines)}
+    starts = {first_word[id(p["words"][0])] for p in parts if id(p["words"][0]) in first_word} - {0}
+    out, li = [], 0
+    for b in blocks:
+        if b[0] == "line":
+            if li in starts:
+                out.append(("break",))
+            li += 1
+        out.append(b)
+    return out
+
 
 def start_background_chords(audio, base, redo):
     import threading, torch
@@ -807,7 +898,7 @@ def main():
     title = title or os.path.basename(base)
     key_str = a.key or (key_name(key, names) if key else None)
     lines = split_lines(words)
-    cho = to_chordpro(merge(lines, chords), title, artist, key_str)
+    cho = to_chordpro(with_section_breaks(merge(lines, chords), lines), title, artist, key_str)
     with open(base + ".cho", "w", encoding="utf-8") as f:
         f.write(cho)
     timer.lap("akkorder")

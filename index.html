@@ -137,7 +137,9 @@
   }
   @keyframes pulse { 50% { opacity: .35; } }
 
-  .job-body { padding: 0 32px 30px; display: flex; flex-direction: column; gap: 20px; }
+  .job-body { padding: 0 32px 30px; }
+  .job-body > div { display: flex; flex-direction: column; gap: 18px; }
+  .job-body .actions + .actions { margin-top: -2px; }
   .sheet-top { display: flex; justify-content: space-between; align-items: flex-start; gap: 14px; flex-wrap: wrap; }
   .sheet-top h2 { margin: 0; font-weight: 800; font-size: 30px; line-height: 1.15; letter-spacing: -.01em; }
   .chips { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
@@ -289,7 +291,7 @@
 <main>
   <section class="drop" id="drop" aria-labelledby="drop-title">
     <div class="hero-wave" id="hero-wave" aria-hidden="true"></div>
-    <h1 id="drop-title">Slipp en låt, få akkordene</h1>
+    <h1 id="drop-title">Slipp en låt, få tekst og akkorder</h1>
     <p class="lead">Tekst og akkorder over riktig ord – klart til å kopiere.</p>
     <button type="button" id="pick" class="primary">Velg lydfil</button>
     <p class="small">eller dra den hit · mp3, wav, m4a, flac, ogg, aiff · flere filer samtidig</p>
@@ -1166,6 +1168,27 @@ async function retry(j, opts) {
   catch (e) { toast(e.message); }
 }
 
+// Tidslinjen skal alltid bevege seg: mens GPU-en starter og i starten av hvert steg går den
+// litt optimistisk fremover på tid (mot ~35 %), og så tar ekte fremdrift over. Aldri bakover.
+function shownProgress(c, j) {
+  if (j.status === "done") return 1;
+  if (j.status !== "running" && j.status !== "queued") return j.progress || 0;
+  let p = j.progress || 0;
+  if (j.status === "running" && j.started) {
+    const t = Math.max(0, Date.now() / 1000 - j.started);
+    p = Math.max(p, 0.35 * (1 - Math.exp(-t / 40)));    // 10 s ≈ 8 %, 30 s ≈ 18 %, 60 s ≈ 27 %
+  } else if (j.status === "queued") p = Math.max(p, 0.02);
+  if (c.runKey !== j.status + j.started) { c.runKey = j.status + j.started; c.shown = 0; }
+  c.shown = Math.max(c.shown || 0, Math.min(p, 0.99));
+  return c.shown;
+}
+function paintProgress(c) {
+  const shown = shownProgress(c, c.job), lit = Math.round(shown * WAVE_N);
+  const wave = $(".wave", c.el);
+  wave.setAttribute("aria-valuenow", String(Math.round(shown * 100)));
+  wave.querySelectorAll("span").forEach((s, i) => { s.classList.toggle("on", i < lit); s.classList.toggle("edge", i === lit); });
+}
+
 function update(j, force = false) {
   const c = cards.get(j.id);
   c.job = j;
@@ -1173,7 +1196,8 @@ function update(j, force = false) {
   el.className = `job ${j.status}${(j.status === "running" && (j.progress || 0) < 0.04) || j.status === "queued" ? " waiting" : ""}`;
   $(".job-sub", el).textContent = statusLine(j);
   $(".job-time", el).textContent = elapsed(j);
-  const pct = Math.round((j.progress || 0) * 100), lit = Math.round((j.progress || 0) * WAVE_N);
+  const shown = shownProgress(c, j);
+  const pct = Math.round(shown * 100), lit = Math.round(shown * WAVE_N);
   const wave = $(".wave", el);
   wave.setAttribute("aria-valuenow", String(pct));
   wave.querySelectorAll("span").forEach((s, i) => { s.classList.toggle("on", i < lit); s.classList.toggle("edge", i === lit); });
@@ -1240,7 +1264,12 @@ async function poll(now = false) {
   }
 }
 // sekundteller mellom pollene
-setInterval(() => { for (const c of cards.values()) if (c.job.status === "running") $(".job-time", c.el).textContent = elapsed(c.job); }, 1000);
+setInterval(() => {
+  for (const c of cards.values()) {
+    if (c.job.status === "running") $(".job-time", c.el).textContent = elapsed(c.job);
+    if (c.job.status === "running" || c.job.status === "queued") paintProgress(c);
+  }
+}, 1000);
 poll();
 </script>
 </body>
