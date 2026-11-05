@@ -105,6 +105,14 @@
   .staged .fname { flex: 1; min-width: 0; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .staged .fmeta { color: var(--muted); font-size: 14px; font-family: var(--mono); white-space: nowrap; }
   .staged li button { border: 0; width: 40px; min-height: 40px; padding: 0; justify-content: center; font-size: 18px; background: transparent; color: var(--muted); }
+  .staged li { flex-wrap: wrap; }
+  .staged li .lyr-toggle { width: auto; padding: 0 12px; font-size: 14px; font-weight: 600; color: var(--link); }
+  .staged li .lyr-toggle[aria-pressed="true"] { color: var(--text); }
+  .lyr-box { flex-basis: 100%; display: flex; flex-direction: column; gap: 6px; padding: 4px 8px 6px 0; }
+  .lyr-box textarea, .retry-row textarea { width: 100%; min-height: 150px; resize: vertical; padding: 10px 12px; border-radius: 12px;
+                   border: 1px solid var(--line); background: var(--card); color: var(--text); font: 15px/1.45 inherit; font-family: inherit; }
+  .lyr-box small, .retry-row small { color: var(--muted); font-size: 13px; }
+  .retry-row .lyr-field { flex-basis: 100%; display: flex; flex-direction: column; gap: 6px; }
   .staged-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; }
   .staged-actions .summary { color: var(--muted); font-size: 14px; }
   #start { min-height: 52px; padding: 0 34px; font-size: 18px; }
@@ -975,6 +983,9 @@ window.addEventListener("drop", e => {
 
 // Valgte filer venter her til brukeren trykker Start (ingenting starter automatisk)
 let staged = [], starting = false;
+let pendingLyrics = "";                     // på nett: «Lag på nytt» med innlimt tekst -> neste valgte fil
+const LYR_HELP = "Appen bruker teksten din og finner bare når ordene synges, så akkordene havner over riktig ord. " +
+  "Overskrifter som Vers, Refreng og Bro blir deltitler. Skriv ut hele låta med gjentakelser – eller skriv bare «Refreng» for å gjenta det.";
 const fmtSize = n => n >= 1e6 ? `${(n / 1e6).toFixed(1).replace(".", ",")} MB` : `${Math.max(1, Math.round(n / 1e3))} kB`;
 function upload(files) {                       // kalles ved valg/slipp: legg i lista, ikke start
   warmGpu();
@@ -982,7 +993,8 @@ function upload(files) {                       // kalles ved valg/slipp: legg i 
   for (const f of files) (AUDIO.includes(f.name.split(".").pop().toLowerCase()) ? ok : skipped).push(f);
   if (skipped.length) toast(`Hoppet over ${skipped.map(f => f.name).join(", ")} – ikke en lydfil`);
   for (const f of ok) {
-    const item = { file: f, dur: null };
+    const item = { file: f, dur: null, lyrics: pendingLyrics, showLyrics: !!pendingLyrics };
+    pendingLyrics = "";
     staged.push(item);
     try {                                       // vis lengden på låta
       const url = URL.createObjectURL(f), a = new Audio();
@@ -1005,9 +1017,22 @@ function renderStaged() {
   $("#staged-list").innerHTML = staged.map((it, i) => `<li>
       <span class="fname" title="${esc(it.file.name)}">${esc(it.file.name)}</span>
       <span class="fmeta">${it.dur ? fmtTime(it.dur) + " · " : ""}${fmtSize(it.file.size)}</span>
+      ${whatSel.value === "chords" ? "" : `<button type="button" class="lyr-toggle" data-lyr="${i}" aria-pressed="${!!it.showLyrics}"
+          title="Lim inn riktig tekst (valgfritt)">${it.lyrics.trim() ? "✓ Din tekst" : "+ Riktig tekst"}</button>`}
       <button type="button" data-rm="${i}" aria-label="Fjern ${esc(it.file.name)}" ${starting ? "disabled" : ""}>✕</button>
+      ${it.showLyrics && whatSel.value !== "chords" ? `<div class="lyr-box">
+        <textarea data-lyrtext="${i}" placeholder="Lim inn teksten til ${esc(it.file.name.replace(/\.[^.]+$/, ""))} (valgfritt)" ${starting ? "disabled" : ""}>${esc(it.lyrics)}</textarea>
+        <small>${esc(LYR_HELP)}</small></div>` : ""}
     </li>`).join("");
   $("#staged-list").querySelectorAll("[data-rm]").forEach(b => b.onclick = () => { staged.splice(+b.dataset.rm, 1); renderStaged(); });
+  $("#staged-list").querySelectorAll("[data-lyr]").forEach(b => b.onclick = () => {
+    const it = staged[+b.dataset.lyr]; it.showLyrics = !it.showLyrics; renderStaged();
+    if (it.showLyrics) { const t = $(`[data-lyrtext="${b.dataset.lyr}"]`); if (t) t.focus(); }
+  });
+  $("#staged-list").querySelectorAll("[data-lyrtext]").forEach(t => t.oninput = () => {
+    const it = staged[+t.dataset.lyrtext]; it.lyrics = t.value;
+    const b = $(`[data-lyr="${t.dataset.lyrtext}"]`); if (b) b.textContent = t.value.trim() ? "✓ Din tekst" : "+ Riktig tekst";
+  });
   const what = { both: "tekst og akkorder", lyrics: "kun tekst", chords: "kun akkorder" }[whatSel.value];
   $("#staged-summary").textContent = starting ? "" :
     `Lager ${what}${whatSel.value === "chords" ? "" : ` · ${LANGS[langSel.value]} · ${isGrundig() ? "Grundig" : "Rask"}`}`;
@@ -1029,6 +1054,7 @@ $("#start").onclick = async () => {
     fd.append("lang", langSel.value);
     fd.append("separate", isGrundig() ? "true" : "false");
     fd.append("mode", whatSel.value);
+    if (whatSel.value !== "chords" && todo[i].lyrics.trim()) fd.append("lyrics", todo[i].lyrics);
     try {
       const j = await api("POST", "/api/jobs", fd);
       expanded.add(j.id);
@@ -1074,7 +1100,7 @@ function statusLine(j) {
   if (j.status === "done") {
     const used = { no: "Bokmål", nn: "Nynorsk" }[j.lang_used] || langName(j.lang_used || j.lang);
     if (j.mode === "chords") return "Ferdig · Kun akkorder";
-    return `Ferdig · ${WHAT[j.mode] ? WHAT[j.mode] + " · " : ""}${j.lang === "auto" && j.lang_used ? "Auto → " : ""}${used} · ${j.separate ? "Grundig" : "Rask"}`;
+    return `Ferdig · ${WHAT[j.mode] ? WHAT[j.mode] + " · " : ""}${j.lang === "auto" && j.lang_used ? "Auto → " : ""}${used} · ${j.separate ? "Grundig" : "Rask"}${j.known_lyrics ? " · din tekst" : ""}`;
   }
   if (j.status === "error") return `Feilet · ${j.error || ""}`;
   if (j.status === "cancelled") return "Avbrutt";
@@ -1209,6 +1235,7 @@ function bodyFor(j, state) {
         <button class="pdf-chart" type="button" ${j.chart ? "" : "disabled"} title="Forhåndsvisning med valg av størrelse">PDF: akkordark</button>
         <button class="edit" type="button">Rediger</button>
         <span class="spacer"></span>
+        ${j.mode === "chords" ? "" : `<button class="link fix-lyrics" type="button" title="Lim inn riktig tekst – appen finner når ordene synges">Feil tekst? Lim inn riktig</button>`}
         ${j.separate || !hasLyrics ? "" : `<button class="link try-grundig" type="button" title="Skiller ut sangstemmen før teksten gjenkjennes – tregere, men bedre på låter med fullt band">Ikke bra nok? Prøv Grundig</button>`}
       </div>
       <div class="actions">
@@ -1247,6 +1274,11 @@ function bodyFor(j, state) {
       openPdf({ kind: "chart", title: meta.title || j.name, meta: bits, units });
     };
     $(".edit", body).onclick = () => { state.editing = true; update(j, true); };
+    const fl = $(".fix-lyrics", body);
+    if (fl) fl.onclick = () => {
+      state.retryOpen = true; update(j, true);
+      const t = $(".r-lyrics", cards.get(j.id).el); if (t) { t.scrollIntoView({ behavior: "smooth", block: "center" }); t.focus(); }
+    };
     const tg = $(".try-grundig", body);
     if (tg) tg.onclick = () => retry(j, { separate: true, lang: j.lang, mode: j.mode });
   } else if (j.status === "error" || j.status === "cancelled") {
@@ -1272,9 +1304,14 @@ function bodyFor(j, state) {
   const rb = $(".retry", body);
   if (rb) rb.onclick = () => { state.retryOpen = !state.retryOpen; update(j, true); };
   const go = $(".retry-go", body);
-  if (go) go.onclick = () => retry(j, {
-    lang: $(".r-lang", body).value, separate: $(".r-mode", body).value === "grundig", mode: $(".r-what", body).value,
-  });
+  const lt = $(".r-lyrics", body);
+  if (lt) lt.oninput = () => { state.lyricsDraft = lt.value; };
+  if (go) go.onclick = () => {
+    const opts = { lang: $(".r-lang", body).value, separate: $(".r-mode", body).value === "grundig", mode: $(".r-what", body).value };
+    if (lt && lt.value.trim()) opts.lyrics = lt.value;
+    state.lyricsDraft = "";
+    retry(j, opts);
+  };
   return body;
 }
 
@@ -1291,6 +1328,11 @@ function retryRow(j, state) {
         <option value="lyrics" ${j.mode === "lyrics" ? "selected" : ""}>Kun tekst</option>
         <option value="chords" ${j.mode === "chords" ? "selected" : ""}>Kun akkorder</option>
       </select></label>
+      <div class="lyr-field">
+        <label for="lyr-${j.id}"><b>Riktig tekst</b> (valgfritt${j.known_lyrics ? " – tomt felt = behold teksten du limte inn sist" : ""})</label>
+        <textarea id="lyr-${j.id}" class="r-lyrics" placeholder="Lim inn riktig tekst">${esc(state.lyricsDraft || "")}</textarea>
+        <small>${esc(LYR_HELP)}</small>
+      </div>
       <button class="primary retry-go" type="button">${ONLINE ? "Velg lydfila på nytt" : "Start ny gjenkjenning"}</button>
       ${ONLINE ? `<span class="job-sub">Lydfila slettes etter hver behandling, så du må velge den på nytt.</span>`
         : j.status === "done" ? `<span class="job-sub">Teksten gjenkjennes på nytt – egne endringer i .cho overskrives.</span>` : ""}
@@ -1304,6 +1346,7 @@ async function retry(j, opts) {
     if (opts.lang) langSel.value = opts.lang;
     if ("separate" in opts) quality.value = opts.separate ? "1" : "0";
     if (opts.mode) whatSel.value = opts.mode;
+    pendingLyrics = opts.lyrics || "";
     saveOpts();
     if (c) update(j, true);
     toast("Lydfila ble slettet etter behandlingen – velg den på nytt");

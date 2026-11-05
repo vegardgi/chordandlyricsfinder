@@ -153,7 +153,7 @@
     <h3>Hva som behandles, hvorfor og på hvilket grunnlag</h3>
     <table>
       <tr><th>Opplysninger</th><th>Formål</th><th>Grunnlag (GDPR)</th></tr>
-      <tr><td>Lydfila du laster opp, filnavnet og resultatet (tekst og akkorder). Lydfila kan inneholde stemmer, og filnavnet kan inneholde navn.</td>
+      <tr><td>Lydfila du laster opp, filnavnet, teksten du eventuelt limer inn og resultatet (tekst og akkorder). Lydfila kan inneholde stemmer, og filnavnet kan inneholde navn.</td>
           <td>Lage akkordarket du ber om</td><td>Art. 6 nr. 1 b – nødvendig for å levere tjenesten du ber om</td></tr>
       <tr><td>Tilfeldig, anonym økt-id per fane</td>
           <td>Holde låtene dine adskilt fra andres</td><td>Art. 6 nr. 1 b</td></tr>
@@ -170,12 +170,14 @@
       <tr><th>Hva</th><th>Hvor</th><th>Slettes</th></tr>
       <tr><td>Lydfil</td><td>Serveren</td>
           <td>Så snart akkordarket er ferdig (eller behandlingen feiler eller avbrytes). Lukker du siden før det, slettes den etter 20 sekunder.</td></tr>
+      <tr><td>Tekst du limer inn (valgfritt)</td><td>Serveren</td>
+          <td>Sammen med lydfila, så snart akkordarket er ferdig</td></tr>
       <tr><td>Mellomresultater (utskilt sangstemme, tidskoder o.l.)</td><td>Serveren</td>
           <td>Sammen med lydfila, så snart akkordarket er ferdig</td></tr>
       <tr><td>Akkordarket (tekst og akkorder)</td><td>Serveren</td>
           <td>Når du lukker siden (etter 20 sekunder), senest etter 15 minutter uten aktivitet, og alltid når serveren starter på nytt</td></tr>
       <tr><td>Lydfila og akkordarket under behandlingen</td><td>Driftsleverandøren (Modal)</td>
-          <td>Lydfila forkastes når behandlingen er ferdig. Akkordarket sendes rett tilbake og lagres ikke hos Modal.</td></tr>
+          <td>Lydfila og innlimt tekst forkastes når behandlingen er ferdig. Akkordarket sendes rett tilbake og lagres ikke hos Modal.</td></tr>
       <tr><td>Fremdriftsmeldinger (filnavn og trinn, ikke tekst)</td><td>Driftsleverandøren (Modal)</td>
           <td>Normalt med en gang behandlingen er ferdig, senest etter 15 minutter</td></tr>
       <tr><td>Tekniske logger (IP-adresse, tidspunkt)</td><td>Driftsleverandøren (Modal)</td>

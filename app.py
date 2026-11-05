@@ -25,6 +25,7 @@ OUT_DIR = os.path.join(HERE, "ferdige")
 SESSION_TTL = int(os.environ.get("AKKORD_SESSION_TTL", 15 * 60))   # sek uten aktivitet -> slett
 LEAVE_GRACE = 20               # sek etter «lukket siden» før sletting (dekker omlasting)
 MAX_MB = int(os.environ.get("AKKORD_MAX_MB", 60))
+MAX_LYRICS = 20000                                                  # tegn innlimt tekst
 MAX_ACTIVE = int(os.environ.get("AKKORD_MAX_ACTIVE", 3))           # låter i kø per økt
 MAX_PER_HOUR = int(os.environ.get("AKKORD_MAX_PER_HOUR", 20))      # opplastinger per IP per time (bare i minnet)
 WORKERS = int(os.environ.get("AKKORD_WORKERS", 1))                 # samtidige jobber (GPU på nett)
@@ -34,7 +35,7 @@ AUDIO_EXT = {".mp3", ".wav", ".m4a", ".flac", ".ogg", ".aac", ".aiff", ".aif", "
 LANGS = {"auto", "no", "nn", "en"}   # nn: eldre valg – «Norsk» finner selv bokmål/nynorsk
 MODES = {"both", "lyrics", "chords"}          # tekst og akkorder / kun tekst / kun akkorder
 META_KEYS = ("id", "name", "audio", "lang", "separate", "status", "stage", "progress",
-             "error", "created", "started", "finished", "lang_used", "timing", "mode", "lang_warn")
+             "error", "created", "started", "finished", "lang_used", "timing", "mode", "lang_warn", "known_lyrics")
 
 if ONLINE:                                  # ingenting overlever en omstart
     shutil.rmtree(JOBS_DIR, ignore_errors=True)
@@ -279,6 +280,8 @@ def run_job_local(jid):
         cmd.append("--no-separate")
     if mode != "both":
         cmd += ["--only", mode]
+    if os.path.exists(lyrics_path(j)) and mode != "chords":
+        cmd += ["--lyrics", lyrics_path(j)]
     env = dict(os.environ, PYTHONUNBUFFERED="1", PYTHONUTF8="1", PYTHONIOENCODING="utf-8",
                PYTHONWARNINGS="ignore", TOKENIZERS_PARALLELISM="false",
                TRANSFORMERS_VERBOSITY="error")
@@ -578,7 +581,7 @@ async def leave(request: Request):
 
 @app.post("/api/jobs")
 async def create_job(request: Request, file: UploadFile = File(...), lang: str = Form("auto"),
-                     separate: bool = Form(False), mode: str = Form("both")):
+                     separate: bool = Form(False), mode: str = Form("both"), lyrics: str = Form("")):
     sid = session_of(request)
     name, ext = safe_name(file.filename)
     if ext not in AUDIO_EXT:
@@ -599,6 +602,7 @@ async def create_job(request: Request, file: UploadFile = File(...), lang: str =
     j = {"id": jid, "session": sid, "name": name, "audio": name + ext, "lang": lang, "separate": separate, "mode": mode,
          "status": "queued", "stage": "I kø", "progress": 0.0, "error": None,
          "created": time.time(), "started": None, "finished": None, "lang_used": None}
+    save_lyrics(j, lyrics)
     size = 0
     with open(audio_path(j), "wb") as f:
         while chunk := await file.read(1 << 20):
@@ -616,6 +620,24 @@ async def create_job(request: Request, file: UploadFile = File(...), lang: str =
         order.append(jid)
     work.put(jid)
     return public(j)
+
+
+def lyrics_path(j):
+    return os.path.join(job_dir(j["id"]), "tekst.txt")
+
+
+def save_lyrics(j, text):
+    """Innlimt tekst (valgfritt): songsheet.py bruker den i stedet for det Whisper hører."""
+    text = (text or "").strip()[:MAX_LYRICS]
+    j["known_lyrics"] = bool(text)
+    try:
+        if text:
+            with open(lyrics_path(j), "w", encoding="utf-8") as f:
+                f.write(text + "\n")
+        elif os.path.exists(lyrics_path(j)):
+            os.remove(lyrics_path(j))
+    except OSError:
+        j["known_lyrics"] = False
 
 
 @app.get("/api/jobs")
@@ -679,6 +701,8 @@ def retry(jid: str, request: Request, body: dict | None = Body(None)):
             j["lang"] = body["lang"]
         if body.get("mode") in MODES:
             j["mode"] = body["mode"]
+        if "lyrics" in body:
+            save_lyrics(j, str(body.get("lyrics") or ""))
         base = out_base(j)
         for ext in (".cho", ".chart.cho", ".words.json"):
             try:

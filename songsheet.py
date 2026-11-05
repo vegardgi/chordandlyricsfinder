@@ -616,7 +616,7 @@ def loudness_gate(y, sr=16000):
     return frac
 
 
-def transcribe_fast(y, model, lang, beams, sr=16000, label=None):
+def transcribe_fast(y, model, lang, beams, sr=16000, label=None, prompt=None):
     """y: 16 kHz mono float32 -> ord med start/slutt. model: navn eller lastet WhisperModel."""
     import faster_whisper.transcribe as fwt
     from faster_whisper import BatchedInferencePipeline
@@ -637,7 +637,7 @@ def transcribe_fast(y, model, lang, beams, sr=16000, label=None):
     prog = Progress()
     prog(0)
     segs = BatchedInferencePipeline(model).transcribe(
-        y, language=lang, task="transcribe", beam_size=beams, batch_size=8,
+        y, language=lang, task="transcribe", beam_size=beams, batch_size=8, initial_prompt=prompt,
         word_timestamps=True, vad_filter=False, clip_timestamps=clips,
         without_timestamps=False,          # med tidsstempel-tokens avslutter ikke Whisper vinduet for tidlig
         condition_on_previous_text=False, no_speech_threshold=None,
@@ -862,17 +862,19 @@ def fast_lyrics(y, a, timer):
     """Språk + tekst med faster-whisper. Gjenbruker turbo-modellen fra språkgjenkjenningen
     når låta ikke er norsk (da trengs bare én modell)."""
     lang, det = a.lang, None
-    say("• Språk: lytter på klippene med mest sang")
-    det = fw_load(DETECT_MODEL)
+    known = bool(getattr(a, "prompt", None))           # kjent tekst: språket kommer fra teksten
+    if lang == "auto" or not known:
+        say("• Språk: lytter på klippene med mest sang")
+        det = fw_load(DETECT_MODEL)
     if lang == "auto":
         lang = fw_detect(det, y)
-    else:
+    elif not known:
         try:
             check_language(det, y, lang)
         except Exception as e:  # noqa: BLE001 – bare en sjekk
             say(f"! Språksjekk feilet ({type(e).__name__}: {e})")
     name = a.model or MODELS.get(lang, OTHER_MODEL)
-    if name == DETECT_MODEL:
+    if name == DETECT_MODEL and det is not None:
         model = det                                       # samme modell – ikke last på nytt
     else:
         del det
@@ -885,7 +887,7 @@ def fast_lyrics(y, a, timer):
                 say(f"! Fant ikke bokmål/nynorsk ({type(e).__name__}) – bruker bokmål")
     say(f"• Bruker språk: {lang}")
     timer.lap("språk")
-    words = transcribe_fast(y, model, lang, a.beams or 5, label=name.split("/")[-1])
+    words = transcribe_fast(y, model, lang, a.beams or 5, label=name.split("/")[-1], prompt=getattr(a, "prompt", None))
     del model
     free_memory()
     return words
@@ -894,7 +896,7 @@ SOLO_SECONDS = 20     # instrumentalt parti midt i låta så langt eller lenger 
 INTERLUDE_SECONDS = 6 # kortere akkordpartier mellom linjer er bare overganger, ikke egne deler
 
 
-def with_sections(blocks, lines, words):
+def with_sections(blocks, lines, words, parts=None):
     """Del låta i seksjoner med tittel (samme inndeling som akkordarket):
     sungne deler -> ('open', kind, tittel) … ('close', kind) rundt linjene (verse/chorus/bridge),
     rene akkordpartier -> ('label', tittel): Intro, Mellomspill / Interlude, Solo, Outro.
@@ -902,10 +904,11 @@ def with_sections(blocks, lines, words):
     import chart
     lang = chart.song_lang(words)
     L = chart.LABELS[lang]
-    try:
-        parts = chart.label_blocks(chart.vocal_blocks(lines, 2.0), lang)
-    except Exception:  # noqa: BLE001
-        parts = []
+    if parts is None:
+        try:
+            parts = chart.label_blocks(chart.vocal_blocks(lines, 2.0), lang)
+        except Exception:  # noqa: BLE001
+            parts = []
     first_word = {id(ln[0]): i for i, ln in enumerate(lines)}
     starts = {}                                       # linjenr -> (kind, tittel)
     for p in parts:
@@ -988,6 +991,8 @@ def main():
     ap.add_argument("--sharps", action="store_true", help="alltid # (C#, D# ...)")
     ap.add_argument("--key", help="overstyr {key: ...} i ChordPro (standard: estimert)")
     ap.add_argument("--quiet", action="store_true", help="ikke skriv ChordPro til stdout")
+    ap.add_argument("--lyrics", help="fil med riktig tekst: brukes i stedet for det Whisper hører; "
+                    "Whisper finner bare når ordene synges. Overskrifter (Vers, Refreng …) blir deltitler")
     ap.add_argument("--only", choices=["lyrics", "chords"], default=None,
                     help="lyrics = bare tekst (ingen akkorder), chords = bare akkorder (ingen tekst, mye raskere)")
     a = ap.parse_args()
@@ -1001,6 +1006,19 @@ def main():
     chord_job = None
     want_lyrics, want_chords = a.only != "chords", a.only != "lyrics"
     wfile = base + ".words.json"
+    stanzas = None
+    if a.lyrics and want_lyrics:
+        import lyrics as known
+        with open(a.lyrics, encoding="utf-8") as f:
+            stanzas = known.parse_lyrics(f.read())
+        if stanzas:
+            a.prompt = known.prompt_text(stanzas)
+            if a.lang == "auto":
+                a.lang = known.lyrics_lang(stanzas)
+            say(f"• Tekst: bruker innlimt tekst ({sum(len(s['lines']) for s in stanzas)} linjer, "
+                f"{len(stanzas)} deler, språk {a.lang})")
+        else:
+            stanzas = None
     if not want_lyrics:
         words = []
         say("• Tekst: hoppes over (bare akkorder)")
@@ -1055,10 +1073,19 @@ def main():
     title, artist = audio_tags(audio)
     title = title or os.path.basename(base)
     key_str = a.key or (key_name(key, names) if key else None)
-    lines = split_lines(words)
+    lines, parts = split_lines(words), None
+    if stanzas and words:                             # kjent tekst: legg den på tid, bruk den
+        import lyrics as known
+        import chart
+        k_lines, k_parts = known.align(stanzas, words, say=say)
+        if k_lines:
+            lines = k_lines
+            words = [w for ln in lines for w in ln]
+            if k_parts:
+                parts = known.label_parts(k_parts, chart.song_lang(words))
     blocks = merge(lines, chords)
     if lines:                                         # bare akkorder: ingen deler å sette titler på
-        blocks = with_sections(blocks, lines, words)
+        blocks = with_sections(blocks, lines, words, parts)
     cho = to_chordpro(blocks, title, artist, key_str)
     with open(base + ".cho", "w", encoding="utf-8") as f:
         f.write(cho)
@@ -1073,7 +1100,7 @@ def main():
         import chart
         sheet = chart.make_chart(load_audio(audio, 22050, mono=True), 22050, words, lines,
                                  chords, title, artist, key_str,
-                                 lang=chart.song_lang(words) if words else None)
+                                 lang=chart.song_lang(words) if words else None, parts=parts)
         if sheet:
             with open(base + ".chart.cho", "w", encoding="utf-8") as f:
                 f.write(sheet)

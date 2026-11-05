@@ -380,7 +380,7 @@ def make_sections(blocks, bars, lang="no"):
     return sections
 
 
-def make_chart(y, sr, words, lines, chords, title=None, artist=None, key=None, lang=None):
+def make_chart(y, sr, words, lines, chords, title=None, artist=None, key=None, lang=None, parts=None):
     """-> ChordPro-tekst med grid-seksjoner (band-blekke)."""
     if not chords:
         return None
@@ -398,7 +398,7 @@ def make_chart(y, sr, words, lines, chords, title=None, artist=None, key=None, l
     if not bars:
         return None
     lang = lang or (song_lang(words) if words else "no")
-    blocks = label_blocks(vocal_blocks(lines, n * period), lang) if lines else []
+    blocks = parts if parts else label_blocks(vocal_blocks(lines, n * period), lang) if lines else []
     sections = make_sections(blocks, bars, lang) if blocks else \
         [{"label": LABELS[lang]["chords"], "a": 0, "b": len(bars), "cue": ""}]
 

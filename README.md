@@ -28,6 +28,10 @@ Deretter åpnes appen i nettleseren på <http://localhost:8765>.
 - Velg hva du vil ha: **Tekst og akkorder**, **Kun tekst** eller **Kun akkorder** (raskest – ca. 15 s
   for en 3-min-låt; språk og Rask/Grundig gråes da ut). Knapper og visninger som ikke gjelder for låta
   (f.eks. transponer/akkordark for «Kun tekst»), gråes ut på resultatet.
+- **Kjenner du teksten?** Trykk «+ Riktig tekst» ved fila (eller «Feil tekst? Lim inn riktig» på et
+  ferdig resultat) og lim inn teksten. Appen bruker da din tekst og finner bare *når* ordene synges, så
+  akkordene havner over riktig ord. Overskrifter (Vers, Refreng, Bro, Pre-refreng, Chorus …) blir deltitler;
+  en overskrift uten tekst under gjentar forrige del med samme navn. Nyttig for kor, dialekt og utydelig sang.
 - Velg språk (Auto / Norsk / Engelsk – «Norsk» finner selv ut om det er bokmål eller nynorsk;
   har du valgt et språk som ikke stemmer med låta, sier appen fra med en knapp for å bytte) og fart: **Rask** (standard, ofte godt resultat)
   eller **Grundig** (tregere: skiller ut sangstemmen med Demucs først – bedre på låter med fullt band).
@@ -101,6 +105,7 @@ source .venv/bin/activate
 
 python songsheet.py sang.mp3                         # auto-språk: tekst + akkorder → sang.cho
 python songsheet.py sang.mp3 --lang en               # tving engelsk
+python songsheet.py sang.mp3 --lyrics tekst.txt      # bruk riktig tekst, finn bare tidene
 python songsheet.py sang.mp3 --lang nn               # nynorsk
 python songsheet.py sang.mp3 --model NbAiLab/nb-whisper-large   # best, tregere
 python songsheet.py sang.mp3 --no-separate           # raskere, uten Demucs

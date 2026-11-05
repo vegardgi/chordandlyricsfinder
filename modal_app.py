@@ -42,6 +42,7 @@ gpu_image = (
     .add_local_file(os.path.join(HERE, "songsheet.py"), f"{APP_DIR}/songsheet.py")
     .add_local_file(os.path.join(HERE, "chords.py"), f"{APP_DIR}/chords.py")
     .add_local_file(os.path.join(HERE, "chart.py"), f"{APP_DIR}/chart.py")
+    .add_local_file(os.path.join(HERE, "lyrics.py"), f"{APP_DIR}/lyrics.py")
 )
 
 web_image = (
@@ -59,7 +60,8 @@ web_image = (
 
 @app.function(image=gpu_image, gpu=GPU, volumes={MODELS: models}, timeout=15 * 60,
               scaledown_window=5 * 60, max_containers=GPU_MAX, memory=16384)
-def process(audio: bytes, filename: str, lang: str, separate: bool, jid: str, mode: str = "both") -> dict:
+def process(audio: bytes, filename: str, lang: str, separate: bool, jid: str, mode: str = "both",
+            lyrics: str = "") -> dict:
     """Én låt: songsheet.py i en midlertidig mappe. Linjene sendes til køen underveis,
     lydfila og alle mellomresultater forsvinner med mappa.
     jid == "warmup": bare start containeren (og hold den varm i scaledown_window)."""
@@ -77,6 +79,10 @@ def process(audio: bytes, filename: str, lang: str, separate: bool, jid: str, mo
             cmd.append("--no-separate")
         if mode in ("lyrics", "chords"):
             cmd += ["--only", mode]
+        if lyrics and mode != "chords":               # innlimt tekst
+            with open(os.path.join(d, "tekst.txt"), "w", encoding="utf-8") as f:
+                f.write(lyrics)
+            cmd += ["--lyrics", os.path.join(d, "tekst.txt")]
         env = dict(os.environ, PYTHONUNBUFFERED="1", PYTHONUTF8="1", PYTHONWARNINGS="ignore",
                    TRANSFORMERS_VERBOSITY="error")
         p = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
@@ -155,8 +161,12 @@ def run_job_modal(jid):
         mode = j.get("mode") or "both"
     with open(path, "rb") as f:
         audio = f.read()
+    lyrics = ""
+    if os.path.exists(akkord.lyrics_path(j)):
+        with open(akkord.lyrics_path(j), encoding="utf-8") as f:
+            lyrics = f.read()
     progress.clear(partition=jid)
-    call = process.spawn(audio, filename, lang, separate, jid, mode)
+    call = process.spawn(audio, filename, lang, separate, jid, mode, lyrics)
     del audio
     akkord.set_job(jid, remote_cancel=lambda: call.cancel())
     tracker = akkord.Tracker(jid, separate, False, mode)
