@@ -456,7 +456,7 @@ def fw_load(name):
                         cpu_threads=os.cpu_count() or 4)
 
 
-def fw_detect(model, y, sr=16000):
+def fw_detect(model, y, sr=16000, with_conf=False):
     """Språk med faster-whisper: klippene med mest sang, stopper tidlig når den er sikker."""
     total, n = {}, 0
     for clip in pick_clips(y, sr):
@@ -475,7 +475,39 @@ def fw_detect(model, y, sr=16000):
     top = sorted(prob.items(), key=lambda kv: -kv[1])[:3]
     say("• Språk: " + ", ".join(f"{c} {p:.0%}" for c, p in top) +
         f" (nordisk {nordic:.0%}, {n} klipp) -> {lang}")
+    if with_conf:
+        return lang, (nordic if lang == "no" else prob[best])
     return lang
+
+
+def norwegian_variant(model, y, sr=16000):
+    """Bokmål eller nynorsk? NB-Whisper er trent på begge (NRK-teksting), så språkgjenkjenningen
+    i selve NB-modellen skiller dem. Ved tvil: bokmål."""
+    no = nn = 0.0
+    for clip in pick_clips(y, sr, n=2):
+        _, _, probs = model.detect_language(audio=clip)
+        p = dict(probs)
+        no += p.get("no", 0.0) + p.get("nb", 0.0)
+        nn += p.get("nn", 0.0)
+    say(f"• Språk: bokmål {no / (no + nn or 1):.0%} / nynorsk {nn / (no + nn or 1):.0%}")
+    return "nn" if nn > no else "no"
+
+
+LANG_NAMES = {"no": "norsk", "nn": "norsk", "en": "engelsk", "sv": "svensk", "da": "dansk", "de": "tysk",
+              "fr": "fransk", "es": "spansk", "it": "italiensk", "pt": "portugisisk", "nl": "nederlandsk",
+              "pl": "polsk", "fi": "finsk", "is": "islandsk"}
+
+
+def check_language(det, y, chosen):
+    """Brukeren valgte språk selv: lytt kjapt og si fra hvis låta høres ut som et annet språk.
+    Skriver «• Språksjekk: valgt X, hørt Y NN%» (app.py viser en advarsel med bytt-knapp)."""
+    heard, conf = fw_detect(det, y, with_conf=True)
+    want = "no" if chosen in NORDIC else chosen
+    if heard != want and conf >= 0.6:
+        say(f"• Språksjekk: valgt {chosen}, hørt {heard} {conf:.0%}")
+        say(f"! Låta høres ut som {LANG_NAMES.get(heard, heard)} ({conf:.0%}), men du valgte "
+            f"{LANG_NAMES.get(chosen, chosen)} – teksten kan bli feil")
+    return heard
 
 
 def windows(dur):
@@ -584,7 +616,7 @@ def loudness_gate(y, sr=16000):
     return frac
 
 
-def transcribe_fast(y, model, lang, beams, sr=16000):
+def transcribe_fast(y, model, lang, beams, sr=16000, label=None):
     """y: 16 kHz mono float32 -> ord med start/slutt. model: navn eller lastet WhisperModel."""
     import faster_whisper.transcribe as fwt
     from faster_whisper import BatchedInferencePipeline
@@ -592,7 +624,7 @@ def transcribe_fast(y, model, lang, beams, sr=16000):
         name = model
         model = fw_load(model)
     else:
-        name = "turbo"
+        name = label or "turbo"
     dev = model.model.device
     say(f"• Tekst: {name} på {dev} (CTranslate2), beams={beams}, overlappende biter")
     # en logglinje i faster-whisper tåler ikke overlappende klipp (negativ «VAD-tid»)
@@ -830,20 +862,30 @@ def fast_lyrics(y, a, timer):
     """Språk + tekst med faster-whisper. Gjenbruker turbo-modellen fra språkgjenkjenningen
     når låta ikke er norsk (da trengs bare én modell)."""
     lang, det = a.lang, None
+    say("• Språk: lytter på klippene med mest sang")
+    det = fw_load(DETECT_MODEL)
     if lang == "auto":
-        say("• Språk: lytter på klippene med mest sang")
-        det = fw_load(DETECT_MODEL)
         lang = fw_detect(det, y)
-        say(f"• Bruker språk: {lang}")
-    timer.lap("språk")
+    else:
+        try:
+            check_language(det, y, lang)
+        except Exception as e:  # noqa: BLE001 – bare en sjekk
+            say(f"! Språksjekk feilet ({type(e).__name__}: {e})")
     name = a.model or MODELS.get(lang, OTHER_MODEL)
-    if det is not None and name == DETECT_MODEL:
+    if name == DETECT_MODEL:
         model = det                                       # samme modell – ikke last på nytt
     else:
         del det
         free_memory()
-        model = name
-    words = transcribe_fast(y, model, lang, a.beams or 5)
+        model = fw_load(name)
+        if lang == "no" and name == MODELS["no"]:         # «Norsk»: finn ut om det er bokmål eller nynorsk
+            try:
+                lang = norwegian_variant(model, y)
+            except Exception as e:  # noqa: BLE001
+                say(f"! Fant ikke bokmål/nynorsk ({type(e).__name__}) – bruker bokmål")
+    say(f"• Bruker språk: {lang}")
+    timer.lap("språk")
+    words = transcribe_fast(y, model, lang, a.beams or 5, label=name.split("/")[-1])
     del model
     free_memory()
     return words

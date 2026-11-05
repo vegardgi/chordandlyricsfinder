@@ -31,10 +31,10 @@ WORKERS = int(os.environ.get("AKKORD_WORKERS", 1))                 # samtidige j
 SESSION_RE = re.compile(r"^[A-Za-z0-9-]{16,64}$")
 PORT = int(os.environ.get("AKKORD_PORT", 8765))
 AUDIO_EXT = {".mp3", ".wav", ".m4a", ".flac", ".ogg", ".aac", ".aiff", ".aif", ".opus"}
-LANGS = {"auto", "no", "nn", "en"}
+LANGS = {"auto", "no", "nn", "en"}   # nn: eldre valg – «Norsk» finner selv bokmål/nynorsk
 MODES = {"both", "lyrics", "chords"}          # tekst og akkorder / kun tekst / kun akkorder
 META_KEYS = ("id", "name", "audio", "lang", "separate", "status", "stage", "progress",
-             "error", "created", "started", "finished", "lang_used", "timing", "mode")
+             "error", "created", "started", "finished", "lang_used", "timing", "mode", "lang_warn")
 
 if ONLINE:                                  # ingenting overlever en omstart
     shutil.rmtree(JOBS_DIR, ignore_errors=True)
@@ -233,6 +233,10 @@ class Tracker:
                 m = re.match(r"Bruker språk:\s*(\S+)", body)
                 if m:
                     set_job(self.jid, lang_used=m.group(1))
+                m = re.match(r"Språksjekk: valgt (\S+), hørt (\S+) (\d+)%", body)
+                if m:                               # valgt språk ser ut til å være feil
+                    set_job(self.jid, lang_warn={"chosen": m.group(1), "heard": m.group(2),
+                                                 "conf": int(m.group(3))})
                 set_job(self.jid, stage=label, detail=detail[:140])
         elif line.startswith("!"):
             set_job(self.jid, detail=line[1:].strip()[:160])
@@ -391,6 +395,18 @@ def worker():
                 run_job(jid)
                 with lock:
                     j = jobs.get(jid)
+                    if j and j.pop("requeue", False):     # språkbytte: kjør igjen, ikke slett lydfila
+                        base = out_base(j)
+                        for ext in (".cho", ".chart.cho", ".words.json"):
+                            try:
+                                os.remove(base + ext)
+                            except OSError:
+                                pass
+                        j.update(status="queued", stage="I kø", progress=0.0, error=None, cho=None, chart=None,
+                                 log=None, detail="", started=None, finished=None, lang_used=None, lang_warn=None)
+                        save_meta(j)
+                        work.put(jid)
+                        continue
                     if j and j.get("status") == "done" and j.get("started") and j.get("finished"):
                         durations.append(j["finished"] - j["started"])
                         del durations[:-50]
@@ -670,11 +686,32 @@ def retry(jid: str, request: Request, body: dict | None = Body(None)):
             except OSError:
                 pass
         j.update(status="queued", stage="I kø", progress=0.0, error=None, cho=None, chart=None, log=None,
-                 detail="", started=None, finished=None, lang_used=None, created=time.time())
+                 detail="", started=None, finished=None, lang_used=None, lang_warn=None, created=time.time())
         save_meta(j)
         order.remove(jid)
         order.append(jid)                          # øverst i lista igjen
     work.put(jid)
+    return public(j)
+
+
+@app.post("/api/jobs/{jid}/relang")
+def relang(jid: str, request: Request, body: dict | None = Body(None)):
+    """Språksjekken sa fra om feil språk: bytt språk og start på nytt med en gang (lydfila
+    finnes fortsatt mens jobben kjører; utskilt vokal og akkorder gjenbrukes)."""
+    lang = (body or {}).get("lang")
+    if lang not in LANGS:
+        raise HTTPException(400, "Ukjent språk")
+    with lock:
+        j = get_job(jid, request)
+        if j["status"] not in ("queued", "running"):
+            raise HTTPException(409, "Jobben er ferdig – bruk «Lag på nytt»")
+        j["lang"] = lang
+        if j["status"] == "queued":
+            j["lang_warn"] = None
+            save_meta(j)
+            return public(j)
+        j.update(status="cancelled", stage="Bytter språk", requeue=True)
+    kill(j)
     return public(j)
 
 

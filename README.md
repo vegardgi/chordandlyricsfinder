@@ -28,7 +28,8 @@ Deretter åpnes appen i nettleseren på <http://localhost:8765>.
 - Velg hva du vil ha: **Tekst og akkorder**, **Kun tekst** eller **Kun akkorder** (raskest – ca. 15 s
   for en 3-min-låt; språk og Rask/Grundig gråes da ut). Knapper og visninger som ikke gjelder for låta
   (f.eks. transponer/akkordark for «Kun tekst»), gråes ut på resultatet.
-- Velg språk (Auto / Bokmål / Nynorsk / Engelsk) og fart: **Rask** (standard, ofte godt resultat)
+- Velg språk (Auto / Norsk / Engelsk – «Norsk» finner selv ut om det er bokmål eller nynorsk;
+  har du valgt et språk som ikke stemmer med låta, sier appen fra med en knapp for å bytte) og fart: **Rask** (standard, ofte godt resultat)
   eller **Grundig** (tregere: skiller ut sangstemmen med Demucs først – bedre på låter med fullt band).
   Ferdige Rask-låter har en snarvei: «Ikke bra nok? Prøv Grundig».
 - Låtene kjøres én om gangen i en kø, med steg, fremdrift og tid brukt.

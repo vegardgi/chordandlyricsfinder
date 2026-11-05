@@ -149,6 +149,11 @@
              font-size: 16px; line-height: 1.45; color: var(--text); min-height: 1.45em; transition: opacity .4s; }
   @media (max-width: 600px) { .job-tip { margin: 2px 14px 16px; padding: 10px 14px; font-size: 15px; } }
   .job-tip b { color: var(--text); font-weight: 600; margin-right: 6px; }
+  .lang-warn { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 16px; margin: 2px 22px 14px; padding: 12px 18px;
+               border-radius: 16px; background: color-mix(in srgb, var(--accent) 22%, var(--card, #fff)); font-size: 15px; line-height: 1.45; }
+  .lang-warn[hidden] { display: none; }
+  .lang-warn span { flex: 1 1 280px; }
+  @media (max-width: 600px) { .lang-warn { margin: 2px 14px 14px; padding: 10px 14px; } }
   .job-tip.fade { opacity: 0; }
   .job:not(.running):not(.queued) .job-tip { display: none; }
   .job-body { padding: 0 32px 30px; }
@@ -332,8 +337,7 @@
     <fieldset class="pills" aria-label="Språk">
       <legend class="sr">Språk</legend>
       <label><input type="radio" name="lang" value="auto" checked><span>Auto</span></label>
-      <label><input type="radio" name="lang" value="no"><span>Bokmål</span></label>
-      <label><input type="radio" name="lang" value="nn"><span>Nynorsk</span></label>
+      <label title="Bokmål eller nynorsk finnes automatisk"><input type="radio" name="lang" value="no"><span>Norsk</span></label>
       <label><input type="radio" name="lang" value="en"><span>Engelsk</span></label>
     </fieldset>
     <div class="mode" role="group" aria-label="Fart">
@@ -371,7 +375,11 @@
 <script>
 "use strict";
 const AUDIO = ["mp3", "wav", "m4a", "flac", "ogg", "aac", "aiff", "aif", "opus"];
-const LANGS = { auto: "Auto", no: "Bokmål", nn: "Nynorsk", en: "Engelsk" };
+const LANGS = { auto: "Auto", no: "Norsk", en: "Engelsk" };
+// navn på språk appen kan høre (språksjekken) og det som faktisk ble brukt (nn = nynorsk)
+const LANG_NAMES = { no: "Norsk", nn: "Nynorsk", en: "Engelsk", sv: "Svensk", da: "Dansk", de: "Tysk", fr: "Fransk",
+                     es: "Spansk", it: "Italiensk", pt: "Portugisisk", nl: "Nederlandsk", pl: "Polsk", fi: "Finsk", is: "Islandsk" };
+const langName = c => LANG_NAMES[c] || LANGS[c] || c;
 const VIEWS = { sheet: "Tekst med akkorder", chart: "Akkordark", chordpro: "ChordPro" };
 let viewPref = "sheet";
 try { const v = localStorage.getItem("akkord-view"); if (v in VIEWS) viewPref = v; } catch (e) {}
@@ -403,6 +411,7 @@ function showMode() {
 }
 try {
   const saved = JSON.parse(localStorage.getItem("akkord-opts") || "{}");
+  if (saved.lang === "nn") saved.lang = "no";          // nynorsk ligger nå under «Norsk»
   if (saved.lang in LANGS) langSel.value = saved.lang;
   if (saved.mode === "grundig") quality.value = "1";
   if (["both", "lyrics", "chords"].includes(saved.what)) whatSel.value = saved.what;
@@ -1047,7 +1056,7 @@ let lastData = [], serverOk = true;
 const WHAT = { both: "", lyrics: "Kun tekst", chords: "Kun akkorder" };
 function statusLine(j) {
   const opts = j.mode === "chords" ? "Kun akkorder"
-    : `${WHAT[j.mode] ? WHAT[j.mode] + " · " : ""}${LANGS[j.lang] || j.lang} · ${j.separate ? "Grundig" : "Rask"}`;
+    : `${WHAT[j.mode] ? WHAT[j.mode] + " · " : ""}${langName(j.lang)} · ${j.separate ? "Grundig" : "Rask"}`;
   if (j.status === "queued") {
     const wait = j.ahead ? ` · ${j.ahead} foran deg${j.eta ? ` · ${j.eta < 60 ? "under 1 min" : "ca. " + fmtWait(j.eta)} ventetid` : ""}` : " · starter straks";
     return `I kø${wait} · ${opts}`;
@@ -1063,7 +1072,7 @@ function statusLine(j) {
     return `${j.stage}${j.detail ? " – " + j.detail : ""}${extra}`;
   }
   if (j.status === "done") {
-    const used = j.lang_used ? (LANGS[j.lang_used] || j.lang_used) : (LANGS[j.lang] || j.lang);
+    const used = { no: "Bokmål", nn: "Nynorsk" }[j.lang_used] || langName(j.lang_used || j.lang);
     if (j.mode === "chords") return "Ferdig · Kun akkorder";
     return `Ferdig · ${WHAT[j.mode] ? WHAT[j.mode] + " · " : ""}${j.lang === "auto" && j.lang_used ? "Auto → " : ""}${used} · ${j.separate ? "Grundig" : "Rask"}`;
   }
@@ -1095,6 +1104,7 @@ function makeCard(j) {
       <span class="job-time"></span>
       <button class="quiet cancel" type="button">Avbryt</button>
     </div>
+    <div class="lang-warn" role="alert" hidden></div>
     <p class="job-tip" aria-live="off"></p>
     <div class="job-body" hidden></div>`;
   const state = { editing: false, retryOpen: false, renderedKey: null };
@@ -1344,6 +1354,7 @@ function update(j, force = false) {
     const tip = $(".job-tip", el); if (tip) tip.innerHTML = "";
   }
   showTip(c);
+  showLangWarn(c);
 
   const body = $(".job-body", el);
   const show = (j.status === "done" && expanded.has(j.id)) || j.status === "error" || j.status === "cancelled";
@@ -1355,6 +1366,29 @@ function update(j, force = false) {
   state.renderedKey = key;
   body.hidden = false;
   body.replaceChildren(bodyFor(j, state));
+}
+
+// Språksjekk: valgte språk ser ut til å være feil -> si fra, med knapp for å bytte
+function showLangWarn(c) {
+  const j = c.job, w = j.lang_warn, box = $(".lang-warn", c.el);
+  const active = j.status === "running" || j.status === "queued";
+  const show = w && (active || j.status === "done");
+  const target = w && (w.heard in LANGS ? w.heard : "auto");
+  const key = show ? [j.status, w.heard, w.conf].join("|") : "";
+  if (box.dataset.key === key) return;
+  box.dataset.key = key;
+  box.hidden = !show;
+  if (!show) { box.innerHTML = ""; return; }
+  box.innerHTML = `<span><b>Har du valgt riktig språk?</b> Låta høres ut som ${esc(langName(w.heard).toLowerCase())}
+      (${w.conf} %), men du valgte ${esc(langName(w.chosen).toLowerCase())}. Med feil språk blir teksten ofte feil eller oversatt.</span>
+    <button class="primary relang" type="button">${active ? "Bytt" : "Lag på nytt"} til ${esc(target === "auto" ? "Auto" : langName(target).toLowerCase())}</button>`;
+  $(".relang", box).onclick = async e => {
+    e.target.disabled = true;
+    if (!active) { retry(j, { lang: target }); return; }
+    try { await api("POST", `/api/jobs/${j.id}/relang`, { lang: target }); langSel.value = target; saveOpts();
+          toast(`Starter på nytt med ${target === "auto" ? "Auto" : langName(target).toLowerCase()}`); poll(true); }
+    catch (err) { toast(err.message); e.target.disabled = false; }
+  };
 }
 
 let firstRender = true;
