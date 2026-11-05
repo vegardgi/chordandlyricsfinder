@@ -262,7 +262,9 @@ def make_sections(blocks, bars):
     for k, blk in enumerate(blocks):
         sb = max(first_bar(blk["start"]), pos)
         if sb - pos >= 4 or (k == 0 and sb > pos):
-            sections.append({"label": "Intro" if k == 0 else "Mellomspill", "a": pos, "b": sb, "cue": ""})
+            secs = bars[sb - 1]["end"] - bars[pos]["start"]
+            label = "Intro" if k == 0 else ("Solo / instrumental" if secs >= 20 else "Mellomspill")
+            sections.append({"label": label, "a": pos, "b": sb, "cue": ""})
         elif sections:                      # én takt mellom deler hører til forrige del
             sections[-1]["b"] = sb
         else:

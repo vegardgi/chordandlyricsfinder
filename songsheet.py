@@ -708,8 +708,13 @@ def to_chordpro(blocks, title, artist=None, key=None):
             if o and o[-1] != "":
                 o.append("")
             continue
+        if b[0] == "label":                         # overskrift for instrumentalt parti
+            if o and o[-1] != "":
+                o.append("")
+            o.append(f"{{comment: {b[1]}}}")
+            continue
         if b[0] == "chords":
-            if o and o[-1] != "":                    # instrumentalt parti: egen del
+            if o and o[-1] != "" and not o[-1].startswith("{comment:"):   # instrumentalt parti: egen del
                 o.append("")
             seq = b[1]
             for i in range(0, len(seq), 8):
@@ -787,6 +792,31 @@ def with_section_breaks(blocks, lines):
             if li in starts:
                 out.append(("break",))
             li += 1
+        out.append(b)
+    return out
+
+
+SOLO_SECONDS = 20     # instrumentalt parti midt i låta så langt eller lenger -> «Solo / instrumental»
+
+
+def label_instrumentals(blocks, lines):
+    """Gi rene akkordpartier en overskrift: Intro, Mellomspill, Solo / instrumental, Outro.
+    Om noe er en solo kan ikke høres ut av akkordene – lange partier merkes derfor
+    «Solo / instrumental» (gjettet ut fra lengden)."""
+    n_lines = sum(1 for b in blocks if b[0] == "line")
+    out, li = [], 0
+    for b in blocks:
+        if b[0] == "line":
+            li += 1
+        elif b[0] == "chords":
+            if li == 0:
+                name = "Intro"
+            elif li >= n_lines:
+                name = "Outro"
+            else:
+                gap = lines[li][0]["start"] - lines[li - 1][-1]["end"]
+                name = "Solo / instrumental" if gap >= SOLO_SECONDS else "Mellomspill"
+            out.append(("label", name))
         out.append(b)
     return out
 
@@ -898,7 +928,10 @@ def main():
     title = title or os.path.basename(base)
     key_str = a.key or (key_name(key, names) if key else None)
     lines = split_lines(words)
-    cho = to_chordpro(with_section_breaks(merge(lines, chords), lines), title, artist, key_str)
+    blocks = merge(lines, chords)
+    if lines:                                         # bare akkorder: ingen overskrifter å sette
+        blocks = label_instrumentals(with_section_breaks(blocks, lines), lines)
+    cho = to_chordpro(blocks, title, artist, key_str)
     with open(base + ".cho", "w", encoding="utf-8") as f:
         f.write(cho)
     timer.lap("akkorder")
