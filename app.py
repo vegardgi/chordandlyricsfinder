@@ -31,8 +31,9 @@ SESSION_RE = re.compile(r"^[A-Za-z0-9-]{16,64}$")
 PORT = int(os.environ.get("AKKORD_PORT", 8765))
 AUDIO_EXT = {".mp3", ".wav", ".m4a", ".flac", ".ogg", ".aac", ".aiff", ".aif", ".opus"}
 LANGS = {"auto", "no", "nn", "en"}
+MODES = {"both", "lyrics", "chords"}          # tekst og akkorder / kun tekst / kun akkorder
 META_KEYS = ("id", "name", "audio", "lang", "separate", "status", "stage", "progress",
-             "error", "created", "started", "finished", "lang_used", "timing")
+             "error", "created", "started", "finished", "lang_used", "timing", "mode")
 
 if ONLINE:                                  # ingenting overlever en omstart
     shutil.rmtree(JOBS_DIR, ignore_errors=True)
@@ -164,10 +165,15 @@ DOWNLOAD = re.compile(r"(?:Downloading|Fetching|\.safetensors|\.bin|\.th\b|\.pt\
 class Tracker:
     """Gjør songsheet.py-utskrift om til steg, fremdrift og detalj for én jobb."""
 
-    def __init__(self, jid, separate, cached_words):
+    def __init__(self, jid, separate, cached_words, mode="both"):
         self.jid = jid
-        plan = (["sep"] if separate and not cached_words else []) + \
-               (["lang", "text"] if not cached_words else ["text"]) + ["chords"]
+        plan = []
+        if mode != "chords":
+            plan += (["sep"] if separate and not cached_words else []) + \
+                    (["lang", "text"] if not cached_words else ["text"])
+        if mode != "lyrics":
+            plan += ["chords"]
+        plan = plan or ["text"]
         total = sum(STEPS[s][1] for s in plan) or 1
         self.span, acc = {}, 0.0
         for s in plan:
@@ -243,12 +249,14 @@ def run_job_local(jid):
         save_meta(j)
         audio = audio_path(j)
         base = out_base(j)
-        lang, separate = j["lang"], j["separate"]
+        lang, separate, mode = j["lang"], j["separate"], j.get("mode") or "both"
     cached_words = os.path.exists(base + ".words.json")
     cmd = [sys.executable, "-u", os.path.join(HERE, "songsheet.py"), audio,
            "--lang", lang, "--quiet"]
     if not separate:
         cmd.append("--no-separate")
+    if mode != "both":
+        cmd += ["--only", mode]
     env = dict(os.environ, PYTHONUNBUFFERED="1", PYTHONUTF8="1", PYTHONIOENCODING="utf-8",
                PYTHONWARNINGS="ignore", TOKENIZERS_PARALLELISM="false",
                TRANSFORMERS_VERBOSITY="error")
@@ -256,7 +264,7 @@ def run_job_local(jid):
     p = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, stdin=subprocess.DEVNULL,
                          env=env, cwd=job_dir(jid), bufsize=0, creationflags=flags)
     set_job(jid, proc=p)
-    tracker = Tracker(jid, separate, cached_words)
+    tracker = Tracker(jid, separate, cached_words, mode)
     buf = b""
     with open(os.path.join(job_dir(jid), "logg.txt"), "w", encoding="utf-8") as log:
         while True:
@@ -368,6 +376,7 @@ def load_existing():
         j["audio"] = os.path.basename(j.get("audio") or "")      # eldre format: full sti
         j.setdefault("lang", "auto")
         j.setdefault("separate", True)
+        j.setdefault("mode", "both")
         cho = out_base(j) + ".cho"
         if j.get("status") == "done" and os.path.exists(cho):
             with open(cho, encoding="utf-8") as f:
@@ -465,13 +474,15 @@ async def leave(request: Request):
 
 @app.post("/api/jobs")
 async def create_job(request: Request, file: UploadFile = File(...), lang: str = Form("auto"),
-                     separate: bool = Form(False)):
+                     separate: bool = Form(False), mode: str = Form("both")):
     sid = session_of(request)
     name, ext = safe_name(file.filename)
     if ext not in AUDIO_EXT:
         raise HTTPException(400, f"Ukjent filtype «{ext or 'ingen'}». Bruk mp3, wav, m4a, flac, ogg eller aiff.")
     if lang not in LANGS:
         lang = "auto"
+    if mode not in MODES:
+        mode = "both"
     if ONLINE:
         with lock:
             active = sum(1 for j in jobs.values() if j.get("session") == sid
@@ -480,7 +491,7 @@ async def create_job(request: Request, file: UploadFile = File(...), lang: str =
             raise HTTPException(429, f"Maks {MAX_ACTIVE} låter i kø om gangen – vent til en er ferdig.")
     jid = time.strftime("%Y%m%d-%H%M%S-") + uuid.uuid4().hex[:6]
     os.makedirs(job_dir(jid))
-    j = {"id": jid, "session": sid, "name": name, "audio": name + ext, "lang": lang, "separate": separate,
+    j = {"id": jid, "session": sid, "name": name, "audio": name + ext, "lang": lang, "separate": separate, "mode": mode,
          "status": "queued", "stage": "I kø", "progress": 0.0, "error": None,
          "created": time.time(), "started": None, "finished": None, "lang_used": None}
     size = 0
@@ -559,6 +570,8 @@ def retry(jid: str, request: Request, body: dict | None = Body(None)):
             j["separate"] = bool(body["separate"])
         if body.get("lang") in LANGS:
             j["lang"] = body["lang"]
+        if body.get("mode") in MODES:
+            j["mode"] = body["mode"]
         base = out_base(j)
         for ext in (".cho", ".chart.cho", ".words.json"):
             try:

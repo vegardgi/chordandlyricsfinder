@@ -739,6 +739,8 @@ def main():
     ap.add_argument("--sharps", action="store_true", help="alltid # (C#, D# ...)")
     ap.add_argument("--key", help="overstyr {key: ...} i ChordPro (standard: estimert)")
     ap.add_argument("--quiet", action="store_true", help="ikke skriv ChordPro til stdout")
+    ap.add_argument("--only", choices=["lyrics", "chords"], default=None,
+                    help="lyrics = bare tekst (ingen akkorder), chords = bare akkorder (ingen tekst, mye raskere)")
     a = ap.parse_args()
 
     audio = os.path.abspath(a.audio)
@@ -748,8 +750,12 @@ def main():
 
     timer = Timer()
     chord_job = None
+    want_lyrics, want_chords = a.only != "chords", a.only != "lyrics"
     wfile = base + ".words.json"
-    if os.path.exists(wfile) and not a.redo_lyrics:
+    if not want_lyrics:
+        words = []
+        say("• Tekst: hoppes over (bare akkorder)")
+    elif os.path.exists(wfile) and not a.redo_lyrics:
         words = repair_words(read_json(wfile))
         say(f"• Tekst: gjenbruker {os.path.basename(wfile)}")
     else:
@@ -761,7 +767,7 @@ def main():
         y = load_audio(src, 16000, mono=True)             # dekodes én gang, brukes til begge
         fast = have_fast() and not a.slow and not a.sequential
         words = None
-        if fast and not (os.path.exists(base + ".chords.raw.json") and not a.redo_chords):
+        if fast and want_chords and not (os.path.exists(base + ".chords.raw.json") and not a.redo_chords):
             # akkordene bruker ~2 kjerner og tekstgjenkjenningen utnytter ikke alle hele
             # tida -> kjør akkordene i bakgrunnen samtidig (lite minne, CTranslate2 er eget)
             chord_job = start_background_chords(audio, base, a.redo_chords)
@@ -787,11 +793,15 @@ def main():
         chord_job.join()
         if chord_job.error:
             say(f"! Akkorder i bakgrunnen feilet ({chord_job.error}) – prøver på nytt")
-    raw = find_chords(audio, base + ".chords.raw.json", a.redo_chords and chord_job is None)
-    key = estimate_key(raw)                               # staver Db/Gb eller C#/F# etter toneart
-    names = FLAT if a.flats else SHARP if a.sharps else names_for_key(key)
-    chords = clean(raw, a.min_len, names)
-    write_json(base + ".chords.json", chords, indent=2)
+    if want_chords:
+        raw = find_chords(audio, base + ".chords.raw.json", a.redo_chords and chord_job is None)
+        key = estimate_key(raw)                           # staver Db/Gb eller C#/F# etter toneart
+        names = FLAT if a.flats else SHARP if a.sharps else names_for_key(key)
+        chords = clean(raw, a.min_len, names)
+        write_json(base + ".chords.json", chords, indent=2)
+    else:
+        key, names, chords = None, MIXED, []
+        say("• Akkorder: hoppes over (bare tekst)")
 
     title, artist = audio_tags(audio)
     title = title or os.path.basename(base)
@@ -803,14 +813,19 @@ def main():
     timer.lap("akkorder")
 
     # band-blekke: takter (beat tracking), deler og repetisjoner -> <navn>.chart.cho
-    say("• Akkordark: takter og deler")
+    if want_chords:
+        say("• Akkordark: takter og deler")
     try:
+        if not want_chords:
+            raise StopIteration
         import chart
         sheet = chart.make_chart(load_audio(audio, 22050, mono=True), 22050, words, lines,
                                  chords, title, artist, key_str)
         if sheet:
             with open(base + ".chart.cho", "w", encoding="utf-8") as f:
                 f.write(sheet)
+    except StopIteration:
+        pass
     except Exception as e:  # noqa: BLE001 – blekka er et tillegg; teksten er viktigst
         say(f"! Akkordark feilet ({type(e).__name__}: {e})")
     timer.lap("akkordark")

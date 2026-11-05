@@ -55,7 +55,7 @@ web_image = (
 
 @app.function(image=gpu_image, gpu=GPU, volumes={MODELS: models}, timeout=15 * 60,
               scaledown_window=5 * 60, max_containers=GPU_MAX, memory=16384)
-def process(audio: bytes, filename: str, lang: str, separate: bool, jid: str) -> dict:
+def process(audio: bytes, filename: str, lang: str, separate: bool, jid: str, mode: str = "both") -> dict:
     """Én låt: songsheet.py i en midlertidig mappe. Linjene sendes til køen underveis,
     lydfila og alle mellomresultater forsvinner med mappa."""
     import re, subprocess, sys, tempfile, time
@@ -67,6 +67,8 @@ def process(audio: bytes, filename: str, lang: str, separate: bool, jid: str) ->
         cmd = [sys.executable, "-u", f"{APP_DIR}/songsheet.py", path, "--lang", lang, "--quiet"]
         if not separate:
             cmd.append("--no-separate")
+        if mode in ("lyrics", "chords"):
+            cmd += ["--only", mode]
         env = dict(os.environ, PYTHONUNBUFFERED="1", PYTHONUTF8="1", PYTHONWARNINGS="ignore",
                    TRANSFORMERS_VERBOSITY="error")
         p = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
@@ -133,13 +135,14 @@ def run_job_modal(jid):
                  log=None, started=time.time(), finished=None, cho=None, timing=None)
         path, base = akkord.audio_path(j), akkord.out_base(j)
         lang, separate, filename = j["lang"], j["separate"], j["audio"]
+        mode = j.get("mode") or "both"
     with open(path, "rb") as f:
         audio = f.read()
     progress.clear(partition=jid)
-    call = process.spawn(audio, filename, lang, separate, jid)
+    call = process.spawn(audio, filename, lang, separate, jid, mode)
     del audio
     akkord.set_job(jid, remote_cancel=lambda: call.cancel())
-    tracker = akkord.Tracker(jid, separate, False)
+    tracker = akkord.Tracker(jid, separate, False, mode)
     result = None
     while result is None:
         try:

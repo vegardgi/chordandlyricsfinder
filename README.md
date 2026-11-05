@@ -24,6 +24,9 @@ Deretter åpnes appen i nettleseren på <http://localhost:8765>.
 
 - Slipp én eller flere lydfiler hvor som helst i vinduet (eller klikk for å velge).
   mp3, wav, m4a, flac, ogg, aiff – ffmpeg trengs ikke.
+- Velg hva du vil ha: **Tekst og akkorder**, **Kun tekst** eller **Kun akkorder** (raskest – ca. 15 s
+  for en 3-min-låt; språk og Rask/Grundig gråes da ut). Knapper og visninger som ikke gjelder for låta
+  (f.eks. transponer/akkordark for «Kun tekst»), gråes ut på resultatet.
 - Velg språk (Auto / Bokmål / Nynorsk / Engelsk) og fart: **Rask** (standard, ofte godt resultat)
   eller **Grundig** (tregere: skiller ut sangstemmen med Demucs først – bedre på låter med fullt band).
   Ferdige Rask-låter har en snarvei: «Ikke bra nok? Prøv Grundig».
@@ -35,7 +38,8 @@ Deretter åpnes appen i nettleseren på <http://localhost:8765>.
   Gjelder visning, kopiering, nedlasting og PDF.
 - Knapper: **Kopier tekst med akkorder over** (for melding/e-post/Word), **Kopier ChordPro**,
   **Kopier akkordark** (ChordPro grid), **Last ned .cho**, **PDF: tekst med akkorder**,
-  **PDF: akkordark** (utskriftsvindu → «Lagre som PDF»), **Rediger** (redigerer visningen du står i;
+  **PDF: akkordark** (forhåndsvisning av A4-sidene med 1 eller 2 kolonner, størrelse −/+ og «få plass
+  på N sider»; deretter «Lagre som PDF»), **Rediger** (redigerer visningen du står i;
   Ctrl/⌘+S lagrer), **Kjør på nytt**, **Slett**.
 - Nederst: lenke til vilkår, opphavsrett og personvern (`/vilkar`).
 - Alle ferdige `.cho`-filer kopieres til mappa `ferdige/` («Åpne mappe med ferdige filer»).
@@ -93,6 +97,8 @@ python songsheet.py sang.mp3 --model NbAiLab/nb-whisper-large   # best, tregere
 python songsheet.py sang.mp3 --no-separate           # raskere, uten Demucs
 python songsheet.py sang.mp3 --redo-lyrics           # transkriber teksten på nytt
 python songsheet.py sang.mp3 --redo-chords           # finn akkordene på nytt
+python songsheet.py sang.mp3 --only chords           # bare akkorder (+ akkordark), ingen tekst
+python songsheet.py sang.mp3 --only lyrics           # bare tekst, ingen akkorder
 python songsheet.py sang.mp3 --beams 1               # enda raskere tekst, litt dårligere
 python songsheet.py sang.mp3 --flats                 # alltid b (standard: etter toneart)
 

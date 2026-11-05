@@ -89,6 +89,12 @@
   .mode-end:hover { background: none; color: var(--text); }
   .mode-end[aria-pressed="true"] { color: var(--text); font-weight: 600; }
   .mode-desc { margin: -10px 0 0; text-align: center; font-size: 14px; color: var(--muted); }
+  button:disabled, .btn[aria-disabled="true"] { opacity: .4; cursor: not-allowed; filter: grayscale(1); }
+  button:disabled:hover { background: inherit; }
+  .off { opacity: .4; filter: grayscale(1); }
+  .off, .off * { cursor: not-allowed !important; }
+  fieldset.tools-set { border: 0; padding: 0; margin: 0; min-width: 0; }
+  fieldset.tools-set:disabled { opacity: .4; filter: grayscale(1); }
 
   #banner { display: none; padding: 12px 18px; border-radius: 16px; background: var(--danger-soft); color: var(--danger); font-size: 15px; }
   #banner.show { display: block; }
@@ -274,6 +280,14 @@
   </section>
 
   <div class="options">
+    <fieldset class="pills" aria-label="Hva vil du ha?">
+      <legend class="sr">Hva vil du ha?</legend>
+      <label><input type="radio" name="what" value="both" checked><span>Tekst og akkorder</span></label>
+      <label><input type="radio" name="what" value="lyrics"><span>Kun tekst</span></label>
+      <label><input type="radio" name="what" value="chords"><span>Kun akkorder</span></label>
+    </fieldset>
+  </div>
+  <div class="options" id="lyric-opts">
     <fieldset class="pills" aria-label="Språk">
       <legend class="sr">Språk</legend>
       <label><input type="radio" name="lang" value="auto" checked><span>Auto</span></label>
@@ -288,6 +302,7 @@
     </div>
   </div>
   <p class="mode-desc" id="mode-desc">Rask gir ofte godt resultat. Grundig er tregere – prøv den hvis Rask ikke ble god nok.</p>
+  <p class="mode-desc" id="chords-desc" hidden>Kun akkorder er raskest – språk og Rask/Grundig gjelder bare teksten.</p>
 
   <div id="banner" role="alert"></div>
   <section id="jobs" aria-live="polite" aria-label="Låter"></section>
@@ -318,6 +333,17 @@ const langSel = {                         // språk: radioknapper som piller
   get value() { return ($('input[name="lang"]:checked') || {}).value || "auto"; },
   set value(v) { const r = $(`input[name="lang"][value="${v}"]`); if (r) r.checked = true; },
 };
+const whatSel = {
+  get value() { return ($('input[name="what"]:checked') || {}).value || "both"; },
+  set value(v) { const r = $(`input[name="what"][value="${v}"]`); if (r) r.checked = true; },
+};
+function showWhat() {                      // «Kun akkorder»: språk og fart gjelder ikke
+  const off = whatSel.value === "chords";
+  const box = $("#lyric-opts");
+  box.classList.toggle("off", off);
+  box.querySelectorAll("input, button").forEach(el => el.disabled = off);
+  $("#mode-desc").hidden = off; $("#chords-desc").hidden = !off;
+}
 // Rask = tekst rett fra lydfila. Grundig = skill ut sangstemmen først (Demucs) – tregere, bedre på band.
 const isGrundig = () => quality.value === "1";
 function showMode() {
@@ -328,12 +354,15 @@ try {
   const saved = JSON.parse(localStorage.getItem("akkord-opts") || "{}");
   if (saved.lang in LANGS) langSel.value = saved.lang;
   if (saved.mode === "grundig") quality.value = "1";
+  if (["both", "lyrics", "chords"].includes(saved.what)) whatSel.value = saved.what;
 } catch (e) { /* ingen lagring */ }
-const saveOpts = () => { showMode(); try { localStorage.setItem("akkord-opts", JSON.stringify({ lang: langSel.value, mode: isGrundig() ? "grundig" : "rask" })); } catch (e) {} };
+const saveOpts = () => { showMode(); showWhat(); try { localStorage.setItem("akkord-opts", JSON.stringify({ lang: langSel.value, mode: isGrundig() ? "grundig" : "rask", what: whatSel.value })); } catch (e) {} };
+document.querySelectorAll('input[name="what"]').forEach(r => r.onchange = saveOpts);
 document.querySelectorAll('input[name="lang"]').forEach(r => r.onchange = saveOpts);
 quality.oninput = saveOpts;
 document.querySelectorAll(".mode-end").forEach(b => b.onclick = () => { quality.value = b.dataset.set; saveOpts(); });
 showMode();
+showWhat();
 
 // ------------------------------------------------------------ bølger (pynt + fremdrift)
 const waveHeights = (n, seed, lo, hi) => Array.from({ length: n }, (_, i) =>
@@ -696,7 +725,7 @@ function openPdf(doc) {                              // doc: {kind, title, meta,
   doc.head = `<h1>${esc(doc.title)}</h1>${doc.meta ? `<p class="pmeta">${esc(doc.meta)}</p>` : `<p class="pmeta"></p>`}`;
   dlg.innerHTML = `<div class="pd">
     <div class="pd-bar">
-      <h2 id="pd-title">PDF: ${kind === "chart" ? "akkordark" : "tekst med akkorder"}</h2>
+      <h2 id="pd-title">PDF: ${kind === "chart" ? "akkordark" : doc.noChords ? "tekst" : "tekst med akkorder"}</h2>
       <fieldset class="pills" aria-label="Kolonner"><legend class="sr">Kolonner</legend>
         <label><input type="radio" name="pd-cols" value="1"><span>1 kolonne</span></label>
         <label><input type="radio" name="pd-cols" value="2"><span>2 kolonner</span></label>
@@ -789,6 +818,7 @@ async function upload(files) {
     fd.append("file", f);
     fd.append("lang", langSel.value);
     fd.append("separate", isGrundig() ? "true" : "false");
+    fd.append("mode", whatSel.value);
     try {
       const j = await api("POST", "/api/jobs", fd);
       expanded.add(j.id);
@@ -808,13 +838,16 @@ const cards = new Map();        // id -> {el, job, state}
 const expanded = new Set();     // id-er der forhåndsvisningen er åpen
 let lastData = [], serverOk = true;
 
+const WHAT = { both: "", lyrics: "Kun tekst", chords: "Kun akkorder" };
 function statusLine(j) {
-  const opts = `${LANGS[j.lang] || j.lang} · ${j.separate ? "Grundig" : "Rask"}`;
+  const opts = j.mode === "chords" ? "Kun akkorder"
+    : `${WHAT[j.mode] ? WHAT[j.mode] + " · " : ""}${LANGS[j.lang] || j.lang} · ${j.separate ? "Grundig" : "Rask"}`;
   if (j.status === "queued") return `I kø${j.ahead ? ` (${j.ahead} foran deg)` : ""} · ${opts}`;
   if (j.status === "running") return `${j.stage}${j.detail ? " – " + j.detail : ""}`;
   if (j.status === "done") {
     const used = j.lang_used ? (LANGS[j.lang_used] || j.lang_used) : (LANGS[j.lang] || j.lang);
-    return `Ferdig · ${j.lang === "auto" && j.lang_used ? "Auto → " : ""}${used} · ${j.separate ? "Grundig" : "Rask"}`;
+    if (j.mode === "chords") return "Ferdig · Kun akkorder";
+    return `Ferdig · ${WHAT[j.mode] ? WHAT[j.mode] + " · " : ""}${j.lang === "auto" && j.lang_used ? "Auto → " : ""}${used} · ${j.separate ? "Grundig" : "Rask"}`;
   }
   if (j.status === "error") return `Feilet · ${j.error || ""}`;
   if (j.status === "cancelled") return "Avbrutt";
@@ -858,7 +891,10 @@ function makeCard(j) {
 function bodyFor(j, state) {
   const body = document.createElement("div");
   if (j.status === "done") {
-    const view = state.view && (state.view !== "chart" || j.chart) ? state.view : (viewPref === "chart" && !j.chart ? "sheet" : viewPref);
+    const mode = j.mode || "both";
+    const hasLyrics = mode !== "chords", hasChords = mode !== "lyrics";
+    const canView = v => v === "chart" ? !!j.chart : v === "sheet" ? hasLyrics : true;
+    const view = [state.view, viewPref, mode === "chords" ? "chart" : "sheet", "chordpro"].find(v => v && canView(v));
     const editField = view === "chart" ? "chart" : "cho";
     if (state.editing) {
       body.innerHTML = `
@@ -907,14 +943,14 @@ function bodyFor(j, state) {
             ${meta.artist ? `<span class="chip">${esc(meta.artist)}</span>` : ""}
             ${soundKey ? `<span class="chip">Toneart ${esc(soundKey)}</span>` : ""}
             ${capo ? `<span class="chip">Capo ${capo} – grep som ${esc(metaNow.key ? keyName(shiftKey(parseKey(metaNow.key), -capo)) : "")}</span>` : ""}
-            <span class="chip">${j.separate ? "Grundig" : "Rask"}</span>
+            <span class="chip">${mode === "chords" ? "Kun akkorder" : (mode === "lyrics" ? "Kun tekst · " : "") + (j.separate ? "Grundig" : "Rask")}</span>
           </div>
         </div>
         <div class="views" role="group" aria-label="Visning">
-          ${Object.entries(VIEWS).map(([v, t]) => `<button type="button" data-view="${v}" aria-pressed="${v === view}" ${v === "chart" && !j.chart ? "disabled title=\"Ikke laget for denne låta – kjør på nytt\"" : ""}>${t}</button>`).join("")}
+          ${Object.entries(VIEWS).map(([v, t]) => `<button type="button" data-view="${v}" aria-pressed="${v === view}" ${canView(v) ? "" : `disabled title="${v === "chart" ? (hasChords ? "Ikke laget for denne låta – kjør på nytt" : "Låta ble laget som «Kun tekst»") : "Låta ble laget som «Kun akkorder»"}"`}>${v === "sheet" && !hasChords ? "Tekst" : t}</button>`).join("")}
         </div>
       </div>
-      <div class="tools">
+      <fieldset class="tools-set" ${hasChords ? "" : "disabled title=\"Ingen akkorder – låta ble laget som «Kun tekst»\""}><legend class="sr">Transponer og capo</legend><div class="tools">
         <span class="stepper" role="group" aria-label="Transponer">
           <button type="button" class="t-down" aria-label="Transponer ned et halvtrinn">−</button>
           <output aria-live="polite">${shift > 0 ? "+" : ""}${shift || "0"}${soundKey ? " · " + esc(soundKey) : ""}</output>
@@ -925,20 +961,20 @@ function bodyFor(j, state) {
         </label>
         ${hint && !capo ? `<button type="button" class="link capo-hint">Forslag: capo ${hint.capo} (grep som ${esc(hint.shape)})</button>` : ""}
         ${shift || capo ? `<button type="button" class="link reset">Tilbake til original</button>` : ""}
-      </div>
+      </div></fieldset>
       ${content}
       <div class="actions">
-        <button class="primary copy-plain" type="button" title="Akkordlinje over tekstlinje – for melding, e-post, Word">Kopier tekst med akkorder over</button>
+        <button class="primary copy-plain" type="button" ${hasLyrics ? "" : "disabled"} title="Akkordlinje over tekstlinje – for melding, e-post, Word">${hasChords ? "Kopier tekst med akkorder over" : "Kopier tekst"}</button>
         <button class="primary copy-cho" type="button" title="ChordPro: [Akkord] rett foran ordet – for OnSong, songbook-apper o.l.">Kopier ChordPro</button>
         <button class="primary copy-chart" type="button" ${j.chart ? "" : "disabled"} title="Band-blekke med taktstreker og repetisjoner (ChordPro grid)">Kopier akkordark</button>
       </div>
       <div class="actions">
         <button class="dl" type="button">Last ned .cho</button>
-        <button class="pdf-sheet" type="button" title="Forhåndsvisning med valg av kolonner og størrelse">PDF: tekst med akkorder</button>
+        <button class="pdf-sheet" type="button" ${hasLyrics ? "" : "disabled"} title="Forhåndsvisning med valg av kolonner og størrelse">${hasChords ? "PDF: tekst med akkorder" : "PDF: tekst"}</button>
         <button class="pdf-chart" type="button" ${j.chart ? "" : "disabled"} title="Forhåndsvisning med valg av størrelse">PDF: akkordark</button>
         <button class="edit" type="button">Rediger</button>
         <span class="spacer"></span>
-        ${j.separate ? "" : `<button class="link try-grundig" type="button" title="Skiller ut sangstemmen før teksten gjenkjennes – tregere, men bedre på låter med fullt band">Ikke bra nok? Prøv Grundig</button>`}
+        ${j.separate || !hasLyrics ? "" : `<button class="link try-grundig" type="button" title="Skiller ut sangstemmen før teksten gjenkjennes – tregere, men bedre på låter med fullt band">Ikke bra nok? Prøv Grundig</button>`}
       </div>
       <div class="actions">
         <button class="quiet retry" type="button">Kjør på nytt …</button>
@@ -959,7 +995,7 @@ function bodyFor(j, state) {
     const ch = $(".capo-hint", body); if (ch) ch.onclick = () => setT(shift, hint.capo);
     const rs = $(".reset", body); if (rs) rs.onclick = () => setT(0, 0);
     $(".copy-plain", body).onclick = async () =>
-      toast(await copyText(plain) ? "Tekst med akkorder over kopiert" : "Kunne ikke kopiere");
+      toast(await copyText(plain) ? (hasChords ? "Tekst med akkorder over kopiert" : "Tekst kopiert") : "Kunne ikke kopiere");
     $(".copy-cho", body).onclick = async () =>
       toast(await copyText(cho) ? "ChordPro kopiert" : "Kunne ikke kopiere");
     $(".copy-chart", body).onclick = async () =>
@@ -968,7 +1004,7 @@ function bodyFor(j, state) {
     const bits = [meta.artist, soundKey && `Toneart ${soundKey}`, capo && `Capo ${capo} (grep som ${metaNow.key ? keyName(shiftKey(parseKey(metaNow.key), -capo)) : ""})`]
       .filter(Boolean).join(" · ");
     $(".pdf-sheet", body).onclick = () =>
-      openPdf({ kind: "sheet", title: meta.title || j.name, meta: bits, units: sheetUnits(cho) });
+      openPdf({ kind: "sheet", title: meta.title || j.name, meta: bits, units: sheetUnits(cho), noChords: !hasChords });
     $(".pdf-chart", body).onclick = () => {
       const { head, sections } = chartParts(chart);
       const units = sections.map(sec => [sec.head, ...sec.rows]);
@@ -977,7 +1013,7 @@ function bodyFor(j, state) {
     };
     $(".edit", body).onclick = () => { state.editing = true; update(j, true); };
     const tg = $(".try-grundig", body);
-    if (tg) tg.onclick = () => retry(j, { separate: true, lang: j.lang });
+    if (tg) tg.onclick = () => retry(j, { separate: true, lang: j.lang, mode: j.mode });
   } else if (j.status === "error" || j.status === "cancelled") {
     body.innerHTML = `
       ${j.status === "error" ? `<p class="err-msg">${esc(j.error || "Noe gikk galt")}</p>` : ""}
@@ -1002,7 +1038,7 @@ function bodyFor(j, state) {
   if (rb) rb.onclick = () => { state.retryOpen = !state.retryOpen; update(j, true); };
   const go = $(".retry-go", body);
   if (go) go.onclick = () => retry(j, {
-    lang: $(".r-lang", body).value, separate: $(".r-mode", body).value === "grundig",
+    lang: $(".r-lang", body).value, separate: $(".r-mode", body).value === "grundig", mode: $(".r-what", body).value,
   });
   return body;
 }
@@ -1014,6 +1050,11 @@ function retryRow(j, state) {
       <label>Fart <select class="r-mode">
         <option value="rask" ${j.separate ? "" : "selected"}>Rask</option>
         <option value="grundig" ${j.separate ? "selected" : ""}>Grundig (tregere)</option>
+      </select></label>
+      <label>Lag <select class="r-what">
+        <option value="both" ${(j.mode || "both") === "both" ? "selected" : ""}>Tekst og akkorder</option>
+        <option value="lyrics" ${j.mode === "lyrics" ? "selected" : ""}>Kun tekst</option>
+        <option value="chords" ${j.mode === "chords" ? "selected" : ""}>Kun akkorder</option>
       </select></label>
       <button class="primary retry-go" type="button">Start ny gjenkjenning</button>
       ${j.status === "done" ? `<span class="job-sub">Teksten gjenkjennes på nytt – egne endringer i .cho overskrives.</span>` : ""}
@@ -1045,7 +1086,7 @@ function update(j, force = false) {
   if (!show) { body.hidden = true; body.innerHTML = ""; state.renderedKey = null; return; }
   if (state.editing && !force) return;              // ikke rør teksten mens du redigerer
   const key = [j.status, j.cho, j.chart, j.error, j.log, j.timing, state.editing, state.retryOpen, state.view || viewPref,
-               state.shift, state.capo, j.lang, j.separate].join("\u0001");
+               state.shift, state.capo, j.lang, j.separate, j.mode].join("\u0001");
   if (key === state.renderedKey && !force) return;
   state.renderedKey = key;
   body.hidden = false;
