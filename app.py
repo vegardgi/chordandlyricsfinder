@@ -322,6 +322,8 @@ def run_job_local(jid):
 
 
 RUNNER = run_job_local        # modal_app.py bytter til en GPU-kjører
+WARMUP = None                 # modal_app.py: start en GPU-container på forhånd
+_last_warmup = 0.0
 
 
 def purge_inputs(jid):
@@ -501,6 +503,29 @@ def session_of(request: Request):
         s = sessions.setdefault(sid, {"seen": 0, "leaving": None})
         s["seen"], s["leaving"] = time.time(), None
     return sid
+
+
+@app.post("/api/warmup")
+def warmup(request: Request):
+    """Brukeren er i gang med å velge fil: start GPU-en nå, så den er varm når Start trykkes.
+    Struping: høyst én oppvarming per 2 minutter (containeren holdes varm i 5 min)."""
+    global _last_warmup
+    session_of(request)
+    if WARMUP is None:
+        return {"ok": True, "warm": False}
+    with lock:
+        if time.time() - _last_warmup < 120:
+            return {"ok": True, "warm": True}
+        _last_warmup = time.time()
+    threading.Thread(target=lambda: _safe(WARMUP), daemon=True).start()
+    return {"ok": True, "warm": True}
+
+
+def _safe(fn):
+    try:
+        fn()
+    except Exception:  # noqa: BLE001
+        pass
 
 
 @app.post("/api/leave")

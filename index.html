@@ -125,6 +125,11 @@
   .wave { flex: 2 1 280px; display: flex; align-items: center; gap: 3px; height: 36px; min-width: 160px; }
   .wave span { flex: 1; border-radius: 2px; background: var(--wave); transition: background .3s; }
   .wave span.on { background: var(--wave-on); }
+  @media (prefers-reduced-motion: no-preference) {
+    .job.waiting .wave span { animation: wavewait 1.6s ease-in-out infinite; animation-delay: calc(var(--i) * 28ms); }
+  }
+  .job.waiting .wave { opacity: .9; }
+  @keyframes wavewait { 0%, 100% { background: var(--wave); } 45% { background: var(--wave-on); } }
   .job.done .wave, .job.error .wave, .job.cancelled .wave { display: none; }
   .job.queued .wave span { opacity: .6; }
   @media (prefers-reduced-motion: no-preference) {
@@ -814,15 +819,24 @@ function download(name, text) {
   setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 1000);
 }
 
+// ------------------------------------------------------------ oppvarming (bare på nett)
+// Når noen begynner å velge en fil, startes GPU-en i bakgrunnen, så den er varm ved Start.
+let lastWarm = 0;
+function warmGpu() {
+  if (!ONLINE || Date.now() - lastWarm < 110000) return;
+  lastWarm = Date.now();
+  api("POST", "/api/warmup").catch(() => {});
+}
+
 // ------------------------------------------------------------ opplasting
 const drop = $("#drop"), fileInput = $("#file");
-drop.onclick = e => { if (!e.target.closest("button")) fileInput.click(); };
-$("#pick").onclick = () => fileInput.click();
+drop.onclick = e => { if (!e.target.closest("button")) { warmGpu(); fileInput.click(); } };
+$("#pick").onclick = () => { warmGpu(); fileInput.click(); };
 fileInput.onchange = () => { upload([...fileInput.files]); fileInput.value = ""; };
 
 let dragDepth = 0;
 const hasFiles = e => [...(e.dataTransfer?.types || [])].includes("Files");
-window.addEventListener("dragenter", e => { if (!hasFiles(e)) return; e.preventDefault(); dragDepth++; $("#overlay").classList.add("show"); drop.classList.add("over"); });
+window.addEventListener("dragenter", e => { if (!hasFiles(e)) return; warmGpu(); e.preventDefault(); dragDepth++; $("#overlay").classList.add("show"); drop.classList.add("over"); });
 window.addEventListener("dragover", e => { if (hasFiles(e)) { e.preventDefault(); e.dataTransfer.dropEffect = "copy"; } });
 window.addEventListener("dragleave", e => { if (!hasFiles(e)) return; if (--dragDepth <= 0) { dragDepth = 0; $("#overlay").classList.remove("show"); drop.classList.remove("over"); } });
 window.addEventListener("drop", e => {
@@ -836,6 +850,7 @@ window.addEventListener("drop", e => {
 let staged = [], starting = false;
 const fmtSize = n => n >= 1e6 ? `${(n / 1e6).toFixed(1).replace(".", ",")} MB` : `${Math.max(1, Math.round(n / 1e3))} kB`;
 function upload(files) {                       // kalles ved valg/slipp: legg i lista, ikke start
+  warmGpu();
   const ok = [], skipped = [];
   for (const f of files) (AUDIO.includes(f.name.split(".").pop().toLowerCase()) ? ok : skipped).push(f);
   if (skipped.length) toast(`Hoppet over ${skipped.map(f => f.name).join(", ")} – ikke en lydfil`);
@@ -938,7 +953,7 @@ function makeCard(j) {
     <div class="job-head">
       <div class="job-title"><div class="job-name"></div><div class="job-sub"></div></div>
       <div class="wave" role="progressbar" aria-label="Fremdrift" aria-valuemin="0" aria-valuemax="100">
-        ${waveHeights(WAVE_N, j.name.length, 8, 34).map(h => `<span style="height:${h}px"></span>`).join("")}
+        ${waveHeights(WAVE_N, j.name.length, 8, 34).map((h, i) => `<span style="height:${h}px;--i:${i}"></span>`).join("")}
       </div>
       <span class="job-time"></span>
       <button class="quiet cancel" type="button">Avbryt</button>
@@ -1155,7 +1170,7 @@ function update(j, force = false) {
   const c = cards.get(j.id);
   c.job = j;
   const { el, state } = c;
-  el.className = `job ${j.status}`;
+  el.className = `job ${j.status}${(j.status === "running" && (j.progress || 0) < 0.04) || j.status === "queued" ? " waiting" : ""}`;
   $(".job-sub", el).textContent = statusLine(j);
   $(".job-time", el).textContent = elapsed(j);
   const pct = Math.round((j.progress || 0) * 100), lit = Math.round((j.progress || 0) * WAVE_N);

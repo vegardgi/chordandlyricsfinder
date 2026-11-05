@@ -59,8 +59,12 @@ web_image = (
               scaledown_window=5 * 60, max_containers=GPU_MAX, memory=16384)
 def process(audio: bytes, filename: str, lang: str, separate: bool, jid: str, mode: str = "both") -> dict:
     """Én låt: songsheet.py i en midlertidig mappe. Linjene sendes til køen underveis,
-    lydfila og alle mellomresultater forsvinner med mappa."""
+    lydfila og alle mellomresultater forsvinner med mappa.
+    jid == "warmup": bare start containeren (og hold den varm i scaledown_window)."""
     import re, subprocess, sys, tempfile, time
+    if jid == "warmup":
+        return {"returncode": 0, "log": "warmup"}
+    progress.put_many([("• GPU klar", True)], partition=jid, partition_ttl=QUEUE_TTL)
     with tempfile.TemporaryDirectory() as d:
         path = os.path.join(d, os.path.basename(filename))
         with open(path, "wb") as f:
@@ -142,7 +146,7 @@ def run_job_modal(jid):
     with akkord.lock:
         j = akkord.jobs[jid]
         j.update(status="running", stage="Starter GPU", progress=0.01,
-                 detail="første låt etter en pause tar litt lengre tid", error=None,
+                 detail="GPU-en våkner – tar ofte 1–2 min når den har stått i ro", error=None,
                  log=None, started=time.time(), finished=None, cho=None, timing=None)
         path, base = akkord.audio_path(j), akkord.out_base(j)
         lang, separate, filename = j["lang"], j["separate"], j["audio"]
@@ -159,6 +163,8 @@ def run_job_modal(jid):
     def take(item):                       # fremdriftslinje eller bit av resultatet
         if len(item) == 3 and item[0] == "__result__":
             parts[item[1]].append(item[2])
+        elif item[0] == "• GPU klar":
+            akkord.set_job(jid, stage="GPU klar", detail="starter analysen", progress=0.03)
         else:
             tracker.line(item[0], item[1])
     result = None
@@ -222,4 +228,5 @@ def web():
     sys.path.insert(0, APP_DIR)
     import app as akkord
     akkord.RUNNER = run_job_modal
+    akkord.WARMUP = lambda: process.spawn(b"", "", "auto", False, "warmup", "both")
     return akkord.app
