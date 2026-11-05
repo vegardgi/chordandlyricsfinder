@@ -189,25 +189,58 @@
     .chart .bar .dot { display: none; }
   }
 
-  /* utskrift / PDF: bare arket */
+  /* PDF: forhåndsvisning og utskrift. Sidene deles opp av appen selv (A4), så det du ser er det du får. */
+  .pp-page { width: 210mm; height: 297mm; padding: 16mm 14mm 18mm; box-sizing: border-box; position: relative; overflow: hidden;
+             background: #fff; color: #111; font-family: var(--sans); font-size: 15px; line-height: 1.3;
+             --text: #111; --chord: #000; --muted: #555; --ink: #111; --on-ink: #fff; --chip: #fff; }
+  .pp-head h1 { font-size: 1.9em; font-weight: 800; letter-spacing: -.01em; margin: 0 0 .15em; line-height: 1.1; }
+  .pp-head .pmeta { font-size: .82em; color: #444; margin: 0; padding-bottom: 1.1em; }
+  .pp-cols { display: flex; gap: 8mm; align-items: flex-start; }
+  .pp-col { flex: none; }
+  .pp-sheet .ln { display: flex; flex-wrap: wrap; align-items: flex-end; padding-bottom: .3em; }
+  .pp-sheet .seg { display: inline-flex; flex-direction: column; }
+  .pp-sheet .c { font-family: var(--mono); font-weight: 500; font-size: .84em; line-height: 1.35; min-height: 1.35em;
+                 padding-right: .4em; white-space: pre; color: #000; }
+  .pp-sheet .l { white-space: pre; }
+  .pp-sheet .only-chords .seg { margin-right: .7em; }
+  .pp-sheet .only-chords .l { display: none; }
+  .pp-sheet .no-chords .c { display: none; }
+  .pp-sheet .comment { font-style: italic; color: #555; font-size: .85em; margin: 0; padding-bottom: .4em; }
+  .pp-gap { height: .9em; }
+  .pp-page .chart .row { margin-top: 0; padding-bottom: .45em; grid-template-columns: repeat(4, minmax(0, 1fr)) 2.2em; }
+  .pp-page .chart .bar { font-size: 1em; min-height: 2.4em; padding: 0 .55em; gap: .3em; }
+  .pp-page .chart .bar .dot { font-size: .75em; }
+  .pp-page .chart .sec-head { margin: 0; padding: .5em 0 .45em; }
+  .pp-page .chart .sec-label { font-size: .85em; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  .pp-page .chart .cue { font-size: .8em; }
+  .pp-page .chip { background: none; border: 1px solid #999; font-size: .75em; }
+  .pp-foot { position: absolute; left: 14mm; right: 14mm; bottom: 8mm; display: flex; justify-content: space-between;
+             font-size: 8pt; color: #666; }
+
+  dialog#pdf { width: min(1100px, 96vw); max-width: none; height: 94vh; max-height: none; padding: 0; border: 0; border-radius: 24px;
+               background: var(--card); color: var(--text); overflow: hidden; }
+  dialog#pdf::backdrop { background: rgba(10, 16, 40, .55); }
+  .pd { display: flex; flex-direction: column; height: 100%; }
+  .pd-bar { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 16px; padding: 14px 20px; border-bottom: 2px solid var(--line); }
+  .pd-bar h2 { margin: 0; font-size: 18px; font-weight: 800; margin-right: auto; }
+  .pd-bar .pills { padding: 4px; background: var(--chip); }
+  .pd-bar .pills span { min-height: 38px; padding: 0 14px; }
+  .pd-count { font-family: var(--mono); font-size: 14px; color: var(--muted); }
+  .pd-fit { display: inline-flex; align-items: center; gap: 8px; font-size: 15px; }
+  .pd-fit select { min-height: 40px; border-radius: 999px; }
+  .pd-view { flex: 1; overflow: auto; background: var(--chip); padding: 22px; display: flex; flex-wrap: wrap; gap: 22px; justify-content: center; align-content: flex-start; }
+  .pd-sheet { flex: none; box-shadow: 0 2px 14px rgba(0,0,0,.18); background: #fff; overflow: hidden; }
+  .pd-sheet .pp-page { transform-origin: top left; }
+  .pp-measure { position: absolute !important; left: -20000px; top: 0; height: auto !important; visibility: hidden; }
+
   #print-area { display: none; }
   @media print {
-    @page { size: A4 portrait; margin: 16mm 14mm; }
-    html, body { background: #fff !important; color: #000; }
+    @page { size: A4 portrait; margin: 0; }
+    html, body { background: #fff !important; margin: 0; }
     body > *:not(#print-area) { display: none !important; }
-    #print-area .chip { background: none; border: 1px solid #999; }
-    #print-area .chart .row + .row { margin-top: 6pt; }
-    #print-area { display: block; color: #000; font-family: var(--sans); }
-    #print-area h1 { font-size: 24pt; margin: 0 0 4pt; }
-    #print-area .pmeta { font-size: 10.5pt; color: #333; margin: 0 0 14pt; }
-    #print-area .sheet, #print-area .chart { font-size: 13pt; }
-    #print-area .sheet .c, #print-area .chart .ch { color: #000; font-weight: 700; }
-    #print-area .chart .sec-label { background: #000; color: #fff; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
-    #print-area .chart .bar, #print-area .chart .bar.last { border-color: #000; min-height: 34pt; }
-    #print-area .chart section, #print-area .sheet .ln { break-inside: avoid; }
-    #print-area .sheet .chorus { border-left-color: #000; }
-    #print-area pre.plain { background: none; padding: 0; font-size: 11pt; }
-    #print-area .pfoot { margin-top: 18pt; font-size: 8.5pt; color: #555; }
+    #print-area { display: block; }
+    #print-area .pp-page { break-after: page; page-break-after: always; }
+    #print-area .pp-page:last-child { break-after: auto; page-break-after: auto; }
   }
 
   #toast { position: fixed; left: 50%; bottom: 24px; transform: translateX(-50%) translateY(20px); z-index: 60;
@@ -517,11 +550,11 @@ function capoHint(keyStr, shift) {               // laveste capo som gir lette g
 }
 
 // ------------------------------------------------------------ band-blekke (ChordPro grid) -> HTML
-function renderChart(src) {
-  const out = [], head = [];
+function chartParts(src) {
+  const sections = [], head = [];
   let inGrid = false, label = "", cue = "", rows = [];
   const flush = () => {
-    out.push(`<section><div class="sec-head"><span class="sec-label">${esc(label)}</span>${cue ? `<span class="cue">${esc(cue)}</span>` : ""}</div>${rows.join("")}</section>`);
+    sections.push({ head: `<div class="sec-head"><span class="sec-label">${esc(label)}</span>${cue ? `<span class="cue">${esc(cue)}</span>` : ""}</div>`, rows });
     rows = []; cue = "";
   };
   for (const raw of src.replace(/\r\n?/g, "\n").split("\n")) {
@@ -552,20 +585,176 @@ function renderChart(src) {
     rows.push(`<div class="row">${cells.join("")}<span class="times">${times ? "x" + times : ""}</span></div>`);
   }
   if (inGrid) flush();
-  return `<div class="chart">${head.length ? `<div class="meta-chips">${head.join("")}</div>` : ""}${out.join("")}</div>`;
+  return { head, sections };
+}
+function renderChart(src) {
+  const { head, sections } = chartParts(src);
+  return `<div class="chart">${head.length ? `<div class="meta-chips">${head.join("")}</div>` : ""}${
+    sections.map(sec => `<section>${sec.head}${sec.rows.join("")}</section>`).join("")}</div>`;
 }
 
-// ------------------------------------------------------------ PDF / utskrift
-function printSheet(title, metaLine, html) {
-  let area = $("#print-area");
-  if (!area) { area = document.createElement("div"); area.id = "print-area"; document.body.appendChild(area); }
-  area.innerHTML = `<h1>${esc(title)}</h1><p class="pmeta">${esc(metaLine)}</p>${html}
-    <p class="pfoot">Auto-generert med Akkordverktøy – sjekk på øret. Sangtekst og musikk tilhører opphavspersonene.</p>`;
-  const prevTitle = document.title;
-  document.title = title;                       // blir filnavnet når man lagrer som PDF
-  window.addEventListener("afterprint", () => { document.title = prevTitle; area.innerHTML = ""; }, { once: true });
-  window.print();
+// ------------------------------------------------------------ PDF: forhåndsvisning, kolonner, størrelse
+// Appen deler selv opp i A4-sider (måler hver linje i riktig bredde og skriftstørrelse), så
+// forhåndsvisningen og utskriften er de samme sidene.
+const MM = 96 / 25.4;
+const PG = { w: 210 * MM, h: 297 * MM, mx: 14 * MM, mt: 16 * MM, mb: 18 * MM, gap: 8 * MM };
+const BASE_PX = 15;
+
+// Tekst med akkorder -> avsnitt (lister med linjer). Ordene deles opp så lange linjer kan brytes.
+function sheetUnits(cho) {
+  const units = [[]];
+  for (const raw of cho.replace(/\r\n?/g, "\n").split("\n")) {
+    const line = raw.replace(/\s+$/, "");
+    const d = line.match(/^\s*\{\s*([a-zA-Z_]+)\s*(?::\s*(.*?))?\s*\}\s*$/);
+    if (d) {
+      const key = d[1].toLowerCase(), val = d[2] || "";
+      if (["comment", "c", "comment_italic", "ci"].includes(key) && !/^Auto-generert/i.test(val))
+        units[units.length - 1].push(`<p class="comment">${esc(val)}</p>`);
+      continue;
+    }
+    if (line.startsWith("#")) continue;
+    if (!line.trim()) { if (units[units.length - 1].length) units.push([]); continue; }
+    const parts = line.split(/\[([^\]]*)\]/);
+    const segs = [];
+    const addText = (c, text) => {                       // akkord + første ord, resten egne biter
+      const words = text.match(/\S+\s*/g) || [text];
+      words.forEach((w, i) => segs.push({ c: i ? "" : c, l: (i === 0 && /^\s/.test(text) ? " " : "") + w }));
+    };
+    if (parts[0]) addText("", parts[0]);
+    for (let i = 1; i < parts.length; i += 2) {
+      const t = parts[i + 1] || "";
+      t.trim() ? addText(parts[i], t) : segs.push({ c: parts[i], l: t });
+    }
+    const hasChords = segs.some(x => x.c), hasText = segs.some(x => x.l.trim());
+    const cls = !hasText ? "only-chords" : !hasChords ? "no-chords" : "";
+    units[units.length - 1].push(`<div class="ln ${cls}">${segs.map(x =>
+      `<span class="seg"><span class="c">${esc(x.c)}</span><span class="l">${esc(x.l) || (hasText ? "&nbsp;" : "")}</span></span>`).join("")}</div>`);
+  }
+  return units.filter(u => u.length);
 }
+
+function paginate(doc, cols, scale) {
+  const contentW = PG.w - 2 * PG.mx, colW = (contentW - (cols - 1) * PG.gap) / cols;
+  const colH = PG.h - PG.mt - PG.mb;
+  const colCls = doc.kind === "chart" ? "pp-col chart" : "pp-col pp-sheet";
+  const m = document.createElement("div");
+  m.className = "pp-page pp-measure";
+  m.style.fontSize = BASE_PX * scale + "px";
+  m.innerHTML = `<div class="pp-head" style="width:${contentW}px">${doc.head}</div>
+    <div class="${colCls}" style="width:${colW}px">${doc.units.map(u => u.map(it => `<div class="pp-it">${it}</div>`).join("")).join("<div class=\"pp-gap\"></div>")}</div>`;
+  document.body.appendChild(m);
+  const headH = m.querySelector(".pp-head").getBoundingClientRect().height;
+  const gapEl = m.querySelector(".pp-gap"), gapH = gapEl ? gapEl.getBoundingClientRect().height : 0;
+  const hs = [...m.querySelectorAll(".pp-it")].map(e => e.getBoundingClientRect().height);
+  m.remove();
+  // pakk: hele avsnitt holdes samlet når de får plass, ellers deles de linje for linje
+  const pages = [];
+  let page, col, used;
+  const newPage = () => { page = Array.from({ length: cols }, () => []); pages.push(page); col = 0; used = 0; };
+  const cap = () => pages.length === 1 ? colH - headH : colH;
+  const nextCol = () => { col++; used = 0; if (col >= cols) newPage(); };
+  newPage();
+  let k = 0;
+  for (const u of doc.units) {
+    const h = u.map((_, i) => hs[k + i]);
+    const uh = h.reduce((a, b) => a + b, 0);
+    const sp = used > 0 ? gapH : 0;
+    if (used + sp + uh <= cap()) {
+      if (sp) page[col].push(`<div class="pp-gap"></div>`);
+      u.forEach(it => page[col].push(it)); used += sp + uh;
+    } else if (used > 0 && uh <= cap()) {
+      nextCol(); u.forEach(it => page[col].push(it)); used = uh;
+    } else {
+      if (sp && used + sp < cap()) { page[col].push(`<div class="pp-gap"></div>`); used += sp; }
+      u.forEach((it, i) => {
+        if (used > 0 && used + h[i] > cap()) nextCol();
+        page[col].push(it); used += h[i];
+      });
+    }
+    k += u.length;
+  }
+  return pages.map((p, i) => `<div class="pp-page" style="font-size:${BASE_PX * scale}px">
+      ${i === 0 ? `<div class="pp-head">${doc.head}</div>` : ""}
+      <div class="pp-cols">${p.map(c => `<div class="${colCls}" style="width:${colW}px">${c.join("")}</div>`).join("")}</div>
+      <div class="pp-foot"><span>${esc(doc.title)}${doc.kind === "chart" ? " – akkordark" : ""}</span><span>${i + 1} / ${pages.length}</span></div>
+    </div>`);
+}
+
+let PDF_OPTS = { cols: { sheet: 1, chart: 1 }, scale: { sheet: 1, chart: 1 } };
+try { Object.assign(PDF_OPTS, JSON.parse(localStorage.getItem("akkord-pdf") || "{}")); } catch (e) {}
+const savePdfOpts = () => { try { localStorage.setItem("akkord-pdf", JSON.stringify(PDF_OPTS)); } catch (e) {} };
+
+function openPdf(doc) {                              // doc: {kind, title, meta, units}
+  let dlg = $("#pdf");
+  if (!dlg) {
+    dlg = document.createElement("dialog");
+    dlg.id = "pdf";
+    dlg.setAttribute("aria-labelledby", "pd-title");
+    document.body.appendChild(dlg);
+  }
+  const kind = doc.kind;
+  doc.head = `<h1>${esc(doc.title)}</h1>${doc.meta ? `<p class="pmeta">${esc(doc.meta)}</p>` : `<p class="pmeta"></p>`}`;
+  dlg.innerHTML = `<div class="pd">
+    <div class="pd-bar">
+      <h2 id="pd-title">PDF: ${kind === "chart" ? "akkordark" : "tekst med akkorder"}</h2>
+      <fieldset class="pills" aria-label="Kolonner"><legend class="sr">Kolonner</legend>
+        <label><input type="radio" name="pd-cols" value="1"><span>1 kolonne</span></label>
+        <label><input type="radio" name="pd-cols" value="2"><span>2 kolonner</span></label>
+      </fieldset>
+      <span class="stepper" role="group" aria-label="Størrelse">
+        <button type="button" class="pd-smaller" aria-label="Mindre skrift">−</button>
+        <output class="pd-size" aria-live="polite"></output>
+        <button type="button" class="pd-bigger" aria-label="Større skrift">+</button>
+      </span>
+      <span class="pd-fit">Få plass på
+        <select class="pd-n" aria-label="Antall sider">${[1, 2, 3, 4].map(n => `<option value="${n}">${n} ${n === 1 ? "side" : "sider"}</option>`).join("")}</select>
+        <button type="button" class="pd-fit-go">Tilpass</button>
+      </span>
+      <span class="pd-count" aria-live="polite"></span>
+      <button type="button" class="primary pd-save">Lagre som PDF / skriv ut</button>
+      <button type="button" class="quiet pd-close">Lukk</button>
+    </div>
+    <div class="pd-view"></div>
+  </div>`;
+  const view = $(".pd-view", dlg);
+  let pages = [];
+  const draw = () => {
+    const cols = PDF_OPTS.cols[kind], scale = PDF_OPTS.scale[kind];
+    dlg.querySelectorAll('input[name="pd-cols"]').forEach(r => r.checked = +r.value === cols);
+    $(".pd-size", dlg).textContent = Math.round(scale * 100) + " %";
+    pages = paginate(doc, cols, scale);
+    $(".pd-count", dlg).textContent = `${pages.length} ${pages.length === 1 ? "side" : "sider"}`;
+    const avail = Math.max(240, Math.min(view.clientWidth - 44, 560));
+    const sc = Math.min(1, avail / PG.w);
+    view.innerHTML = pages.map(pg => `<div class="pd-sheet" style="width:${PG.w * sc}px;height:${PG.h * sc}px">
+      <div style="transform:scale(${sc});transform-origin:top left;width:${PG.w}px">${pg}</div></div>`).join("");
+  };
+  const setScale = v => { PDF_OPTS.scale[kind] = Math.round(Math.max(0.6, Math.min(1.6, v)) * 100) / 100; savePdfOpts(); draw(); };
+  dlg.querySelectorAll('input[name="pd-cols"]').forEach(r => r.onchange = () => { PDF_OPTS.cols[kind] = +r.value; savePdfOpts(); draw(); });
+  $(".pd-smaller", dlg).onclick = () => setScale(PDF_OPTS.scale[kind] - 0.05);
+  $(".pd-bigger", dlg).onclick = () => setScale(PDF_OPTS.scale[kind] + 0.05);
+  $(".pd-fit-go", dlg).onclick = () => {           // største skrift som gir høyst N sider
+    const n = +$(".pd-n", dlg).value, cols = PDF_OPTS.cols[kind];
+    let lo = 0.6, hi = 1.6;
+    if (paginate(doc, cols, lo).length > n) { setScale(lo); toast(`Får ikke plass på ${n} ${n === 1 ? "side" : "sider"} – prøv 2 kolonner`); return; }
+    for (let i = 0; i < 9; i++) { const mid = (lo + hi) / 2; paginate(doc, cols, mid).length <= n ? lo = mid : hi = mid; }
+    setScale(Math.floor(lo * 100) / 100);
+  };
+  $(".pd-close", dlg).onclick = () => dlg.close();
+  $(".pd-save", dlg).onclick = () => {
+    let area = $("#print-area");
+    if (!area) { area = document.createElement("div"); area.id = "print-area"; document.body.appendChild(area); }
+    area.innerHTML = pages.join("");
+    const prevTitle = document.title;
+    document.title = doc.title + (kind === "chart" ? " – akkordark" : "");   // blir filnavnet
+    window.addEventListener("afterprint", () => { document.title = prevTitle; area.innerHTML = ""; }, { once: true });
+    dlg.close();
+    setTimeout(() => window.print(), 50);
+  };
+  dlg.showModal();
+  (document.fonts ? document.fonts.ready : Promise.resolve()).then(draw);
+}
+
 function download(name, text) {
   const a = document.createElement("a");
   a.href = URL.createObjectURL(new Blob([text], { type: "text/plain;charset=utf-8" }));
@@ -745,8 +934,8 @@ function bodyFor(j, state) {
       </div>
       <div class="actions">
         <button class="dl" type="button">Last ned .cho</button>
-        <button class="pdf-sheet" type="button" title="Lagre som PDF eller skriv ut – velg «Lagre som PDF» i utskriftsvinduet">PDF: tekst med akkorder</button>
-        <button class="pdf-chart" type="button" ${j.chart ? "" : "disabled"} title="Lagre som PDF eller skriv ut – velg «Lagre som PDF» i utskriftsvinduet">PDF: akkordark</button>
+        <button class="pdf-sheet" type="button" title="Forhåndsvisning med valg av kolonner og størrelse">PDF: tekst med akkorder</button>
+        <button class="pdf-chart" type="button" ${j.chart ? "" : "disabled"} title="Forhåndsvisning med valg av størrelse">PDF: akkordark</button>
         <button class="edit" type="button">Rediger</button>
         <span class="spacer"></span>
         ${j.separate ? "" : `<button class="link try-grundig" type="button" title="Skiller ut sangstemmen før teksten gjenkjennes – tregere, men bedre på låter med fullt band">Ikke bra nok? Prøv Grundig</button>`}
@@ -779,8 +968,13 @@ function bodyFor(j, state) {
     const bits = [meta.artist, soundKey && `Toneart ${soundKey}`, capo && `Capo ${capo} (grep som ${metaNow.key ? keyName(shiftKey(parseKey(metaNow.key), -capo)) : ""})`]
       .filter(Boolean).join(" · ");
     $(".pdf-sheet", body).onclick = () =>
-      printSheet(meta.title || j.name, bits, `<div class="sheet">${renderChordPro(cho, true)}</div>`);
-    $(".pdf-chart", body).onclick = () => printSheet(`${meta.title || j.name} – akkordark`, bits, renderChart(chart));
+      openPdf({ kind: "sheet", title: meta.title || j.name, meta: bits, units: sheetUnits(cho) });
+    $(".pdf-chart", body).onclick = () => {
+      const { head, sections } = chartParts(chart);
+      const units = sections.map(sec => [sec.head, ...sec.rows]);
+      if (head.length) units.unshift([`<div class="meta-chips">${head.join("")}</div>`]);
+      openPdf({ kind: "chart", title: meta.title || j.name, meta: bits, units });
+    };
     $(".edit", body).onclick = () => { state.editing = true; update(j, true); };
     const tg = $(".try-grundig", body);
     if (tg) tg.onclick = () => retry(j, { separate: true, lang: j.lang });
