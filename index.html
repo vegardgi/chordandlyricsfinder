@@ -145,6 +145,10 @@
   }
   @keyframes pulse { 50% { opacity: .35; } }
 
+  .job-tip { margin: -6px 22px 16px; font-size: 14px; color: var(--muted); min-height: 1.5em; transition: opacity .4s; }
+  .job-tip b { color: var(--text); font-weight: 600; margin-right: 6px; }
+  .job-tip.fade { opacity: 0; }
+  .job:not(.running):not(.queued) .job-tip { display: none; }
   .job-body { padding: 0 32px 30px; }
   .job-body > div { display: flex; flex-direction: column; gap: 18px; }
   .job-body .actions + .actions { margin-top: -2px; }
@@ -829,6 +833,71 @@ function download(name, text) {
   setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 1000);
 }
 
+// ------------------------------------------------------------ underholdning mens man venter
+// Byttes hvert 10. sekund: «Nå:» (hva appen gjør i steget) og «Visste du?» (musikkfakta).
+const NOW_TIPS = {
+  "I kø": ["Du er i kø – låta starter når den foran er ferdig."],
+  "Starter GPU": ["En GPU-maskin startes og programvaren lastes inn.",
+                  "Modellene (rundt 5 GB) lastes inn i minnet.",
+                  "Når maskinen først er varm, går neste låt mye raskere."],
+  "GPU klar": ["GPU-en er klar – analysen starter."],
+  "Skiller ut vokal": ["Demucs deler låta i sangstemme og resten (trommer, bass, gitar …).",
+                       "Med bare sangstemmen igjen er det lettere å høre teksten."],
+  "Gjenbruker vokal": ["Sangstemmen er allerede skilt ut – den brukes på nytt."],
+  "Finner språk": ["Whisper lytter på klippene med mest sang for å finne språket.",
+                   "Norsk, svensk og dansk regnes sammen – norsk sang høres ofte svensk ut for en maskin."],
+  "Gjenkjenner tekst": ["Teksten gjenkjennes i biter på 28 sekunder, som så settes sammen.",
+                        "Hvert ord får et tidsstempel, så akkordene kan settes over riktig ord.",
+                        "Usikre linjer og påfunnet tekst filtreres bort.",
+                        "Partier uten sang hoppes over."],
+  "Gjenbruker tekst": ["Teksten er allerede gjenkjent – den brukes på nytt."],
+  "Finner akkorder": ["Frekvensene i lyden analyseres for å finne akkorden i hvert øyeblikk.",
+                      "Tonearten finnes ut fra akkordene, og akkordene staves etter den (Db eller C#).",
+                      "Slagene i låta finnes, og taktstreker settes der akkordene skifter.",
+                      "Like deler av låta finnes, så akkordarket kan få repetisjonstegn."],
+  "Gjenbruker akkorder": ["Akkordene er allerede funnet – de brukes på nytt."],
+};
+const FACTS = [
+  "Et piano har 88 tangenter – 52 hvite og 36 svarte.",
+  "Vanlig gitarstemming er E A D G B E, fra den tykkeste til den tynneste strengen.",
+  "Tonen A over midt-C er stemt til 440 Hz i det meste av vestlig musikk.",
+  "En oktav opp betyr dobbel frekvens: A er 440 Hz, A en oktav høyere er 880 Hz.",
+  "Med capo på 2. bånd blir G-grepet til en A-akkord.",
+  "C-dur og a-moll har de samme tonene – de er parallelltonearter.",
+  "C–G–Am–F er en av de mest brukte akkordrekkene i popmusikken.",
+  "En durakkord er grunntone, stor ters og kvint: C-dur er C, E og G.",
+  "En mollakkord har liten ters: a-moll er A, C og E.",
+  "Sus4-akkorder bytter tersen ut med kvarten – derfor låter de «uavklarte».",
+  "G7 har en ekstra liten septim som drar mot C-dur.",
+  "D/F# betyr en D-akkord med F# i bassen.",
+  "Vals går i 3/4-takt, mens det meste av popmusikk går i 4/4.",
+  "Tempo måles i BPM – slag per minutt.",
+  "Ukulele stemmes vanligvis G C E A.",
+  "En bassgitar stemmes E A D G – en oktav under gitarens fire dypeste strenger.",
+  "Hardingfela har understrenger som klinger med uten å bli strøket.",
+  "«Ja, vi elsker» har tekst av Bjørnstjerne Bjørnson og melodi av Rikard Nordraak.",
+  "Edvard Grieg skrev musikken til Ibsens «Peer Gynt», blant annet «I Dovregubbens hall».",
+  "Stemmegaffelen ble oppfunnet av den engelske trompetisten John Shore i 1711.",
+  "Kvintsirkelen viser tonearter i rekkefølge: hvert steg med klokka gir én # mer.",
+];
+function tipFor(c) {
+  const j = c.job, n = c.tipN || 0;
+  const now = NOW_TIPS[j.stage] || (j.status === "queued" ? NOW_TIPS["I kø"] : null);
+  if (now && n % 2 === 0) return `<b>Nå:</b>${esc(now[(n / 2) % now.length])}`;
+  const f = FACTS[(c.factStart + Math.floor(n / 2)) % FACTS.length];
+  return `<b>Visste du?</b>${esc(f)}`;
+}
+function showTip(c, next = false) {
+  const el = $(".job-tip", c.el);
+  if (!el || (c.job.status !== "running" && c.job.status !== "queued")) return;
+  if (c.factStart === undefined) c.factStart = Math.floor(Math.random() * FACTS.length);
+  if (next) c.tipN = (c.tipN || 0) + 1;
+  if (!next && el.innerHTML) return;
+  el.classList.add("fade");
+  setTimeout(() => { el.innerHTML = tipFor(c); el.classList.remove("fade"); }, next ? 350 : 0);
+}
+setInterval(() => { for (const c of cards.values()) showTip(c, true); }, 10000);
+
 // ------------------------------------------------------------ oppvarming (bare på nett)
 // Når noen begynner å velge en fil, startes GPU-en i bakgrunnen, så den er varm ved Start.
 let lastWarm = 0;
@@ -969,6 +1038,7 @@ function makeCard(j) {
       <span class="job-time"></span>
       <button class="quiet cancel" type="button">Avbryt</button>
     </div>
+    <p class="job-tip" aria-live="off"></p>
     <div class="job-body" hidden></div>`;
   const state = { editing: false, retryOpen: false, renderedKey: null };
   $(".job-name", el).textContent = j.name;
@@ -1211,6 +1281,12 @@ function update(j, force = false) {
   wave.setAttribute("aria-valuenow", String(pct));
   wave.querySelectorAll("span").forEach((s, i) => { s.classList.toggle("on", i < lit); s.classList.toggle("edge", i === lit); });
   $(".cancel", el).hidden = !(j.status === "running" || j.status === "queued");
+  if (c.lastStage !== j.stage) {                 // nytt steg: vis med en gang hva som skjer nå
+    c.lastStage = j.stage;
+    c.tipN = (c.tipN || 0) % 2 ? (c.tipN || 0) + 1 : (c.tipN || 0);
+    const tip = $(".job-tip", el); if (tip) tip.innerHTML = "";
+  }
+  showTip(c);
 
   const body = $(".job-body", el);
   const show = (j.status === "done" && expanded.has(j.id)) || j.status === "error" || j.status === "cancelled";
