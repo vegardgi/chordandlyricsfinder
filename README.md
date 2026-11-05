@@ -172,6 +172,11 @@ Slik er det gjort raskt:
 
 ## Senere
 
+- **PDF «få plass på 1 side» kutter litt i bunnen.** Utregningen treffer helt på grensen, så
+  avrunding i målingen eller marger fra nettleserens utskriftsvindu skyver siste linje ut.
+  Forslag: legg inn ~2–3 % sikkerhetsmargin i kolonnehøyden (`paginate` i index.html) og test
+  utskrift i Safari og Chrome på Mac.
+
 - Kobling til songbook-appen (ChordPro-basert, OnSong-lignende).
 - Når teksten finnes fra før (CCLI/worship-repoer): align kjent tekst i stedet for Whisper.
 - Automatisk vers/refreng ut fra tekst som gjentar seg.
