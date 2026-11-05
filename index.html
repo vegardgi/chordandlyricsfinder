@@ -308,7 +308,7 @@
   <section id="jobs" aria-live="polite" aria-label="Låter"></section>
 
   <footer>
-    <p class="online-only">Ingen konto, ingen lagring. Alt slettes når du lukker siden – kopier eller last ned før du går.</p>
+    <p class="online-only">Ingen konto, ingen lagring. Lydfila slettes når akkordarket er ferdig, og akkordarket når du lukker siden – kopier eller last ned før du går.</p>
     <p class="local-only">Alt kjører lokalt på maskinen din. Første låt tar lengre tid fordi modellene lastes ned.</p>
     <p>Sangtekster og melodier er vernet av opphavsrett – bruk resultatet til egen øving.
        <a href="/vilkar">Vilkår, opphavsrett og personvern</a></p>
@@ -977,7 +977,7 @@ function bodyFor(j, state) {
         ${j.separate || !hasLyrics ? "" : `<button class="link try-grundig" type="button" title="Skiller ut sangstemmen før teksten gjenkjennes – tregere, men bedre på låter med fullt band">Ikke bra nok? Prøv Grundig</button>`}
       </div>
       <div class="actions">
-        <button class="quiet retry" type="button">Kjør på nytt …</button>
+        <button class="quiet retry" type="button">${ONLINE ? "Lag på nytt med andre valg …" : "Kjør på nytt …"}</button>
         <button class="danger del" type="button">Slett</button>
         <span class="spacer"></span>
         ${j.timing ? `<p class="timing">Tid: ${esc(j.timing)}</p>` : ""}
@@ -1056,14 +1056,25 @@ function retryRow(j, state) {
         <option value="lyrics" ${j.mode === "lyrics" ? "selected" : ""}>Kun tekst</option>
         <option value="chords" ${j.mode === "chords" ? "selected" : ""}>Kun akkorder</option>
       </select></label>
-      <button class="primary retry-go" type="button">Start ny gjenkjenning</button>
-      ${j.status === "done" ? `<span class="job-sub">Teksten gjenkjennes på nytt – egne endringer i .cho overskrives.</span>` : ""}
+      <button class="primary retry-go" type="button">${ONLINE ? "Velg lydfila på nytt" : "Start ny gjenkjenning"}</button>
+      ${ONLINE ? `<span class="job-sub">Lydfila slettes etter hver behandling, så du må velge den på nytt.</span>`
+        : j.status === "done" ? `<span class="job-sub">Teksten gjenkjennes på nytt – egne endringer i .cho overskrives.</span>` : ""}
     </div>`;
 }
 
 async function retry(j, opts) {
   const c = cards.get(j.id);
   if (c) c.state.retryOpen = false;
+  if (ONLINE) {        // på nett slettes lydfila etter behandlingen: velg den på nytt med de nye valgene
+    if (opts.lang) langSel.value = opts.lang;
+    if ("separate" in opts) quality.value = opts.separate ? "1" : "0";
+    if (opts.mode) whatSel.value = opts.mode;
+    saveOpts();
+    if (c) update(j, true);
+    toast("Lydfila ble slettet etter behandlingen – velg den på nytt");
+    fileInput.click();
+    return;
+  }
   try { await api("POST", `/api/jobs/${j.id}/retry`, opts); expanded.add(j.id); poll(true); }
   catch (e) { toast(e.message); }
 }

@@ -3,8 +3,8 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Vilkår og opphavsrett – Akkordverktøy</title>
-<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🎸</text></svg>">
+<title>Vilkår og personvern – Akkordverktøy</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%2314213d' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><rect x='0' y='0' width='24' height='24' rx='6' fill='%23ffc83d' stroke='none'/><path d='M10 17V7l8-1.5v9'/><circle cx='8' cy='17' r='2'/><circle cx='16' cy='15.5' r='2'/></svg>">
 <style>
   @font-face { font-family: "Bricolage Grotesque"; font-style: normal; font-weight: 400 800; font-display: swap;
                src: url(/static/fonts/bricolage-grotesque-latin.woff2) format("woff2"); }
@@ -27,6 +27,7 @@
   h1 { font-size: 34px; font-weight: 800; letter-spacing: -.02em; line-height: 1.1; margin: 18px 0 6px; }
   .updated { color: var(--muted); font-size: 14px; margin: 0 0 28px; }
   h2 { font-size: 18px; margin: 32px 0 8px; }
+  h3 { font-size: 16px; margin: 20px 0 6px; }
   p, li { margin: 0 0 10px; }
   ul { padding-left: 22px; margin: 0 0 10px; }
   .box { background: var(--accent-soft); border-radius: 18px; padding: 16px 20px; margin: 0 0 24px; }
@@ -34,6 +35,8 @@
   table { border-collapse: collapse; width: 100%; font-size: 14px; margin: 6px 0 10px; }
   th, td { text-align: left; padding: 7px 8px; border-bottom: 1px solid var(--line); vertical-align: top; }
   th { color: var(--muted); font-weight: 600; }
+  .toc { font-size: 14px; color: var(--muted); }
+  .toc a { text-decoration: none; }
   footer { margin-top: 40px; color: var(--muted); font-size: 13px; }
 </style>
 </head>
@@ -41,69 +44,161 @@
 <main>
   <a class="back" href="/">← Tilbake til Akkordverktøy</a>
   <h1>Vilkår, opphavsrett og personvern</h1>
-  <p class="updated">Sist oppdatert 4. november 2026</p>
+  <p class="updated">Sist oppdatert 5. november 2026</p>
 
   <div class="box">
-    <p><strong>Kort fortalt:</strong> Akkordverktøy lager et utkast til akkordark fra en lydfil du selv har.
-      Utkastet kan inneholde feil. Sangtekster og musikk tilhører opphavspersonene. Bruk resultatet til
-      din egen øving, og ikke publiser eller del det uten tillatelse.</p>
+    <p><strong>Kort fortalt:</strong> Akkordverktøy lager et maskinlaget utkast til akkordark fra en lydfil du
+      selv har lovlig tilgang til. Utkastet kan inneholde feil. Sangtekster og musikk tilhører opphavspersonene.
+      Bruk resultatet til din egen øving. Ikke publiser det eller del det med andre uten tillatelse.
+      <span class="online-only">Ingen konto, ingen sporing. Lydfila slettes så snart akkordarket er ferdig, og
+      akkordarket når du lukker siden.</span></p>
   </div>
 
-  <h2>1. Hva tjenesten gjør</h2>
-  <p>Akkordverktøy analyserer en lydfil med maskinlæringsmodeller og lager et akkordark i
-    ChordPro-format. Først skilles vokalen ut, så gjenkjennes teksten og akkordene, og til slutt settes
-    akkordene over ordene. Alt er automatisk generert og ikke kontrollert av et menneske.</p>
+  <p class="toc">
+    <a href="#hvem">Hvem står bak</a> ·
+    <a href="#tjenesten">Hva tjenesten gjør</a> ·
+    <a href="#opphavsrett">Opphavsrett</a> ·
+    <a href="#regler">Regler for bruk</a> ·
+    <a href="#personvern">Personvern</a> ·
+    <a href="#nettleser">Lagring i nettleseren</a> ·
+    <a href="#rettighetshavere">For rettighetshavere</a> ·
+    <a href="#garanti">Ansvar</a> ·
+    <a href="#lisenser">Programvare og lisenser</a>
+  </p>
+
+  <h2 id="hvem">1. Hvem står bak</h2>
+  <div class="online-only">
+    <p>Akkordverktøy på nett drives av <strong>Vegard Giskehaug</strong>, privatperson, som et gratis og
+      ikke-kommersielt hobbyprosjekt. Når det står «jeg» på denne siden, er det meg.</p>
+    <ul>
+      <li>E-post: <a href="mailto:post@vegardgiskehaug.com">post@vegardgiskehaug.com</a></li>
+    </ul>
+    <p>Spørsmål om personvern, opphavsrett eller feil kan sendes til e-postadressen over. Jeg svarer så
+      raskt jeg kan.</p>
+  </div>
+  <div class="local-only">
+    <p>Akkordverktøy er laget av Vegard Giskehaug og kjører på din egen maskin. Når du bruker appen lokalt,
+      sender den ingenting til meg eller andre. Kontakt: <a href="mailto:post@vegardgiskehaug.com">post@vegardgiskehaug.com</a>.</p>
+  </div>
+
+  <h2 id="tjenesten">2. Hva tjenesten gjør</h2>
+  <p>Akkordverktøy analyserer en lydfil med maskinlæringsmodeller og lager tekst med akkorder i ChordPro-format
+    og et akkordark med taktstreker (du kan også velge bare tekst eller bare akkorder). Teksten gjenkjennes med talegjenkjenning og akkordene med
+    akkordgjenkjenning, og så settes akkordene over ordene. I <strong>Grundig</strong>-modus skilles
+    sangstemmen ut først. Alt er automatisk generert og ikke kontrollert av et menneske.</p>
   <ul>
-    <li>Teksten kan være feilhørt, mangle linjer eller inneholde ord som ikke synges.</li>
+    <li>Teksten kan være feilhørt, mangle linjer eller inneholde ord som ikke synges. Modellene kan også
+      «finne på» tekst som ikke er der.</li>
     <li>Akkorder, toneart og plassering kan være feil, særlig korte gjennomgangsakkorder.</li>
     <li>Sjekk alltid resultatet på øret før du bruker det.</li>
   </ul>
+  <p class="online-only">Tjenesten er gratis og har begrenset kapasitet: maks 60 MB per fil, maks 3 låter i
+    kø om gangen og maks 20 låter per time. Jeg kan endre grensene, sette den på pause eller legge den ned uten varsel.</p>
 
-  <h2>2. Opphavsrett</h2>
-  <p>Sangtekster, melodier og arrangementer er normalt vernet av <strong>åndsverkloven</strong>.
-    Vernet varer som hovedregel til 70 år etter at opphavspersonen døde. Det gjelder også
-    akkordark du lager selv ut fra en innspilling. De gjengir verket, og du blir ikke eier av sangen
-    ved å skrive den ned.</p>
+  <h2 id="opphavsrett">3. Opphavsrett</h2>
+  <p>Sangtekster, melodier og innspillinger er normalt vernet av <strong>åndsverkloven</strong>. Vernet varer
+    som hovedregel til 70 år etter at opphavspersonen døde. Et akkordark med sangtekst gjengir verket,
+    og du blir ikke eier av sangen ved å skrive den ned.</p>
+
   <p><strong>Dette er som regel greit:</strong></p>
   <ul>
-    <li>å lage et akkordark til <strong>privat bruk</strong> for deg selv og din nærmeste krets,
-      for eksempel for å lære deg eller øve på en sang (åndsverkloven § 26)</li>
+    <li>å lage et akkordark til <strong>privat bruk</strong> for deg selv og din nærmeste familie og
+      venner, for eksempel for å lære deg eller øve på en sang (åndsverkloven § 26)</li>
     <li>å bruke sanger som ikke lenger er vernet, eller som du selv har rettighetene til</li>
   </ul>
+
   <p><strong>Dette krever tillatelse eller lisens:</strong></p>
   <ul>
     <li>å publisere akkordark eller sangtekster på nett, i sosiale medier eller i en app andre kan bruke</li>
     <li>å trykke, selge eller dele ut sangbøker, notehefter eller kopier</li>
-    <li>å vise tekst på storskjerm eller dele kopier i en menighet, et kor, et band eller en skole.
-      Mange menigheter har lisens for dette gjennom <a href="https://ccli.com/">CCLI</a>.</li>
+    <li>å dele akkordark eller tekst i et band, et kor, en menighet eller en skole, eller vise teksten på
+      storskjerm. Det går som regel ut over privat bruk. Mange menigheter har lisens gjennom
+      <a href="https://ccli.com/">CCLI</a>. Sjekk hva lisensen deres faktisk dekker, for den dekker ikke alt.</li>
     <li>offentlig framføring av musikk. Det håndteres normalt av <a href="https://www.tono.no/">TONO</a>.</li>
   </ul>
+
+  <div class="online-only">
+    <p><strong>Om nettversjonen.</strong> Åndsverkloven § 26 tredje ledd sier at privatkopiering av
+      musikkverk ikke kan skje «ved fremmed hjelp». På nettversjonen er det tjenesten som lager utkastet etter
+      din bestilling. Det er ikke avklart hvordan regelen slår ut for en slik automatisk tjeneste. Jeg kan ikke love
+      at all bruk av nettversjonen er dekket av privatkopiretten. Vil du være på den sikre siden, kan du bruke
+      den lokale versjonen av Akkordverktøy, som kjører på din egen maskin. Skriv til
+      <a href="mailto:post@vegardgiskehaug.com">post@vegardgiskehaug.com</a> hvis du vil ha den.</p>
+  </div>
   <p>Er du usikker, ta kontakt med rettighetshaveren (forlag eller låtskriver), CCLI eller TONO.</p>
 
-  <h2>3. Ditt ansvar</h2>
+  <h2 id="regler">4. Regler for bruk</h2>
+  <p>Når du bruker Akkordverktøy, godtar du dette:</p>
   <ul>
-    <li>Du laster bare opp lydfiler du har lovlig tilgang til.</li>
-    <li>Du er selv ansvarlig for hvordan du bruker resultatet, og for at bruken er i tråd med
-      opphavsretten. Se punkt 2.</li>
-    <li>Ikke bruk tjenesten til å lage innhold for publisering eller videresalg uten tillatelse fra rettighetshaverne.</li>
+    <li>Du laster bare opp lydfiler du har <strong>lovlig tilgang til</strong>, for eksempel kjøpte filer,
+      egne opptak eller opptak du har fått lov til å bruke. Ikke last opp lyd du har tatt opp eller lastet ned fra
+      strømmetjenester (for eksempel med «YouTube til mp3»-verktøy) eller fra ulovlige kilder.</li>
+    <li>Du bruker resultatet til privat bruk, eller har tillatelse eller lisens til annen bruk. Se punkt 3.</li>
+    <li>Du laster ikke opp samtaler, intervjuer eller andre opptak av personer som ikke har samtykket.
+      Tjenesten er laget for musikk, ikke for generell talegjenkjenning.</li>
+    <li class="online-only">Du prøver ikke å omgå begrensningene, overbelaste tjenesten eller bruke den automatisert
+      (for eksempel med skript).</li>
+    <li>Du er selv ansvarlig for hvordan du bruker resultatet.</li>
   </ul>
+  <p class="online-only">Er du under 13 år, bør du bruke tjenesten sammen med en voksen.</p>
 
-  <h2>4. Personvern og lagring</h2>
+  <h2 id="personvern">5. Personvernerklæring</h2>
   <div class="online-only">
-    <p><strong>Ingen konto, ingen lagring.</strong> Du trenger ikke logge inn, og vi vet ikke hvem du er.</p>
-    <ul>
-      <li>Lydfila du laster opp, sendes til serveren og behandles der. Både lydfila, mellomresultater og
-        akkordarket slettes når du lukker siden. Har du ikke vært aktiv på 15 minutter, slettes alt
-        uansett. Starter serveren på nytt, slettes alt.</li>
-      <li>Ingen andre kan se låtene dine. Hver fane får en tilfeldig, anonym økt-id som bare finnes i
-        nettleseren din til du lukker fanen.</li>
-      <li>Vi bruker ikke informasjonskapsler (cookies) til sporing, og vi samler ikke inn statistikk.
-        Valgene dine (språk, vokalseparasjon og visning) lagres bare i nettleseren din.</li>
-      <li>Behandlingen skjer hos skyleverandøren <a href="https://modal.com/">Modal</a> (databehandler).
-        Den vanlige tekniske loggføringen hos leverandøren kan inneholde IP-adresse og tidspunkt.
-        Den inneholder ikke lydfiler eller akkordark.</li>
-    </ul>
-    <p>Kopier eller last ned akkordarket før du lukker siden. Vi kan ikke hente det fram igjen.</p>
+    <p><strong>Ingen konto og ingen sporing.</strong> Du trenger ikke logge inn. Jeg vet ikke hvem du er, og jeg
+      bruker ikke analyseverktøy, annonser eller tredjepartsskript.</p>
+
+    <h3>Behandlingsansvarlig</h3>
+    <p>Vegard Giskehaug, e-post <a href="mailto:post@vegardgiskehaug.com">post@vegardgiskehaug.com</a>. Se punkt 1.</p>
+
+    <h3>Hva som behandles, hvorfor og på hvilket grunnlag</h3>
+    <table>
+      <tr><th>Opplysninger</th><th>Formål</th><th>Grunnlag (GDPR)</th></tr>
+      <tr><td>Lydfila du laster opp, filnavnet og resultatet (tekst og akkorder). Lydfila kan inneholde stemmer, og filnavnet kan inneholde navn.</td>
+          <td>Lage akkordarket du ber om</td><td>Art. 6 nr. 1 b – nødvendig for å levere tjenesten du ber om</td></tr>
+      <tr><td>Tilfeldig, anonym økt-id per fane</td>
+          <td>Holde låtene dine adskilt fra andres</td><td>Art. 6 nr. 1 b</td></tr>
+      <tr><td>IP-adresse, tidspunkt og forespurt adresse i tekniske logger hos driftsleverandøren</td>
+          <td>Drift, feilsøking og sikkerhet</td><td>Art. 6 nr. 1 f – berettiget interesse i sikker drift</td></tr>
+      <tr><td>IP-adresse, bare i minnet, for å telle opplastinger den siste timen</td>
+          <td>Hindre misbruk og overforbruk</td><td>Art. 6 nr. 1 f – berettiget interesse</td></tr>
+    </table>
+    <p>Jeg bruker ikke opplysningene til noe annet. Jeg bruker dem ikke til å trene modeller, og jeg
+      selger eller deler dem ikke.</p>
+
+    <h3>Hvor lenge</h3>
+    <table>
+      <tr><th>Hva</th><th>Hvor</th><th>Slettes</th></tr>
+      <tr><td>Lydfil</td><td>Serveren</td>
+          <td>Så snart akkordarket er ferdig (eller behandlingen feiler eller avbrytes). Lukker du siden før det, slettes den etter 20 sekunder.</td></tr>
+      <tr><td>Mellomresultater (utskilt sangstemme, tidskoder o.l.)</td><td>Serveren</td>
+          <td>Sammen med lydfila, så snart akkordarket er ferdig</td></tr>
+      <tr><td>Akkordarket (tekst og akkorder)</td><td>Serveren</td>
+          <td>Når du lukker siden (etter 20 sekunder), senest etter 15 minutter uten aktivitet, og alltid når serveren starter på nytt</td></tr>
+      <tr><td>Lydfila og akkordarket under behandlingen</td><td>Driftsleverandøren (Modal)</td>
+          <td>Lydfila forkastes når behandlingen er ferdig. Akkordarket sendes rett tilbake og lagres ikke hos Modal.</td></tr>
+      <tr><td>Fremdriftsmeldinger (filnavn og trinn, ikke tekst)</td><td>Driftsleverandøren (Modal)</td>
+          <td>Normalt med en gang behandlingen er ferdig, senest etter 15 minutter</td></tr>
+      <tr><td>Tekniske logger (IP-adresse, tidspunkt)</td><td>Driftsleverandøren (Modal)</td>
+          <td>Automatisk etter Modals oppbevaringstid for logger (1 dag på Starter-planen, 30 dager på Team-planen)</td></tr>
+      <tr><td>Valgene dine</td><td>Bare i nettleseren din</td><td>Når du sletter nettstedsdata. Se punkt 6.</td></tr>
+    </table>
+    <p>Kopier eller last ned akkordarket før du lukker siden. Jeg kan ikke hente det fram igjen.</p>
+
+    <h3>Driftsleverandør og overføring til USA</h3>
+    <p>Tjenesten kjører hos <a href="https://modal.com/">Modal Labs, Inc.</a> i USA. Modal er
+      <strong>databehandler</strong> og behandler opplysningene bare på mine vegne, etter
+      <a href="https://modal.com/legal/dpa">Modals databehandleravtale</a>. Modal bruker egne
+      <a href="https://trust.modal.com/subprocessors">underleverandører</a>, for eksempel skyleverandører.
+      Overføringen til USA bygger på EU-kommisjonens <strong>standard personvernbestemmelser</strong> (SCC,
+      GDPR art. 46), som er en del av databehandleravtalen. Kontakt meg hvis du vil ha en kopi av
+      overføringsgrunnlaget.</p>
+
+    <h3>Dine rettigheter</h3>
+    <p>Du har rett til innsyn, retting og sletting, rett til å begrense behandlingen og rett til å protestere mot
+      behandling som bygger på berettiget interesse. I praksis har jeg nesten ingenting som kan knyttes til
+      deg. Låtene dine er bare koblet til en tilfeldig økt-id, og den kjenner bare nettleseren din. Ta
+      kontakt på e-post hvis du har spørsmål. Du kan også klage til
+      <a href="https://www.datatilsynet.no/">Datatilsynet</a>.</p>
   </div>
   <div class="local-only">
     <p>Akkordverktøy kjører på din egen maskin. Lydfilene og resultatene sendes ikke til noen tjeneste
@@ -112,28 +207,63 @@
       fjerner jobbmappa, mens kopien i <code>ferdige/</code> blir liggende.</p>
     <p>Internett brukes bare til å laste ned modellene første gang (fra Hugging Face og Meta) og til å
       installere programvare. Appen samler ikke inn statistikk og bruker ikke informasjonskapsler (cookies).
-      Valgene dine (språk, vokalseparasjon og visning) lagres bare i nettleseren din.</p>
+      Valgene dine (språk, Rask/Grundig og visning) lagres bare i nettleseren din.</p>
   </div>
 
-  <h2>5. Ingen garanti</h2>
-  <p>Tjenesten leveres «som den er», uten garanti for at resultatet er riktig, fullstendig eller egnet
-    til et bestemt formål. Vi er ikke ansvarlige for tap eller skade som følge av bruk av tjenesten eller
-    resultatene, så langt loven tillater det.</p>
+  <h2 id="nettleser">6. Lagring i nettleseren</h2>
+  <p>Akkordverktøy bruker ikke informasjonskapsler (cookies). Nettleseren lagrer bare dette, og ingenting av
+    det brukes til sporing:</p>
+  <table>
+    <tr><th>Navn</th><th>Type</th><th>Innhold og formål</th><th>Varighet</th></tr>
+    <tr class="online-only"><td><code>akkord-session</code></td><td>sessionStorage</td>
+        <td>Tilfeldig økt-id, slik at du bare ser dine egne låter</td><td>Til fanen lukkes</td></tr>
+    <tr><td><code>akkord-opts</code></td><td>localStorage</td>
+        <td>Språk, Rask/Grundig og tekst/akkorder som du har valgt</td><td>Til du sletter nettstedsdata</td></tr>
+    <tr><td><code>akkord-view</code></td><td>localStorage</td>
+        <td>Visningen du har valgt</td><td>Til du sletter nettstedsdata</td></tr>
+    <tr><td><code>akkord-pdf</code></td><td>localStorage</td>
+        <td>Kolonner og størrelse du har valgt for PDF</td><td>Til du sletter nettstedsdata</td></tr>
+  </table>
+  <p>Dette er nødvendig for at tjenesten skal fungere slik du har bedt om, og krever derfor ikke samtykke
+    (ekomloven § 3-15 andre ledd). Skriftene ligger på samme server, så ingen tredjepart får vite at du
+    besøker siden.</p>
 
-  <h2>6. Programvare og modeller</h2>
+  <h2 id="rettighetshavere" class="online-only">7. For rettighetshavere</h2>
+  <div class="online-only">
+    <p>Akkordverktøy lagrer ikke akkordark og har ikke noe bibliotek eller noen offentlig visning av låter.
+      Resultatet finnes bare midlertidig i økten til brukeren som lastet opp fila. Mener du at tjenesten
+      brukes på en måte som krenker dine rettigheter, kan du skrive til <a href="mailto:post@vegardgiskehaug.com">post@vegardgiskehaug.com</a>.
+      Beskriv hvilket verk det gjelder og hva saken handler om. Jeg tar alle henvendelser på alvor, svarer
+      så raskt jeg kan og stanser bruk som er i strid med loven.</p>
+  </div>
+
+  <h2 id="garanti">8. Ingen garanti og begrenset ansvar</h2>
+  <p>Tjenesten er gratis og leveres «som den er». Jeg gir ingen garanti for at resultatet er riktig,
+    fullstendig eller egnet til et bestemt formål, eller for at tjenesten alltid er tilgjengelig.
+    Så langt loven tillater, er jeg ikke ansvarlig for tap eller skade som følge av bruk av tjenesten eller
+    resultatene, og heller ikke for indirekte tap. Dette begrenser ikke ansvar som etter loven ikke kan
+    fraskrives, for eksempel ved forsett eller grov uaktsomhet, eller rettighetene dine etter
+    personvernreglene.</p>
+
+  <h2 id="lisenser">9. Programvare, modeller og skrifter</h2>
   <p>Akkordverktøy bygger på åpen kildekode og åpne modeller:</p>
   <table>
     <tr><th>Del</th><th>Brukes til</th><th>Lisens</th></tr>
     <tr><td><a href="https://huggingface.co/NbAiLab/nb-whisper-medium">NB-Whisper</a> (Nasjonalbiblioteket)</td><td>norsk tekst</td><td>Apache 2.0</td></tr>
     <tr><td><a href="https://huggingface.co/openai/whisper-large-v3-turbo">Whisper large-v3-turbo</a> (OpenAI)</td><td>språk og engelsk tekst</td><td>MIT</td></tr>
-    <tr><td><a href="https://github.com/SYSTRAN/faster-whisper">faster-whisper</a> / CTranslate2</td><td>rask tekstgjenkjenning</td><td>MIT</td></tr>
-    <tr><td><a href="https://github.com/adefossez/demucs">Demucs</a></td><td>vokalseparasjon</td><td>MIT</td></tr>
+    <tr><td><a href="https://github.com/SYSTRAN/faster-whisper">faster-whisper</a> / <a href="https://github.com/OpenNMT/CTranslate2">CTranslate2</a></td><td>rask tekstgjenkjenning</td><td>MIT</td></tr>
+    <tr><td><a href="https://github.com/adefossez/demucs">Demucs</a> (htdemucs)</td><td>vokalseparasjon (Grundig)</td>
+        <td>Koden er MIT. Lisensen for de ferdigtrente modellvektene er ifølge forfatteren ikke avklart.</td></tr>
     <tr><td><a href="https://pypi.org/project/lv-chordia/">lv-chordia</a> (Music X Lab)</td><td>akkordgjenkjenning</td><td>MIT</td></tr>
+    <tr><td>Bricolage Grotesque</td><td>skrift</td><td><a href="/static/fonts/OFL-BricolageGrotesque.txt">SIL Open Font License 1.1</a></td></tr>
+    <tr><td>DM Mono</td><td>skrift (fast bredde)</td><td><a href="/static/fonts/OFL-DMMono.txt">SIL Open Font License 1.1</a></td></tr>
   </table>
-  <p>Lisensene gjelder programvaren og modellene, ikke musikken du analyserer.</p>
+  <p>Akkordgjenkjenningen bygger på J. Jiang, K. Chen, W. Li og G. Xia: «Large-Vocabulary Chord Transcription
+    via Chord Structure Decomposition», ISMIR 2019.</p>
+  <p>Lisensene gjelder programvaren, modellene og skriftene, ikke musikken du analyserer.</p>
 
-  <h2>7. Endringer</h2>
-  <p>Vilkårene kan bli oppdatert. Datoen øverst viser når de sist ble endret.</p>
+  <h2>10. Endringer og lovvalg</h2>
+  <p>Vilkårene kan bli oppdatert. Datoen øverst viser når de sist ble endret. Norsk rett gjelder.</p>
 
   <footer><a href="/">← Tilbake til Akkordverktøy</a></footer>
 </main>

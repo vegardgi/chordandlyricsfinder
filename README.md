@@ -57,9 +57,15 @@ Samme app kan ligge på nett via [Modal](https://modal.com): siden og køen kjø
 CPU-container, og analysen på en GPU som bare koster noe mens den jobber (per sekund, skalerer til null).
 
 **Ingen brukere, ingen lagring.** Hver nettleserfane er en anonym økt som bare ser sine egne låter.
-Lukker du siden, slettes lydfila og akkordarket etter 20 sekunder, og alt slettes uansett etter
-15 minutter uten aktivitet. Man laster opp, kopierer og er ferdig. Modellene er det eneste som
-lagres (i Modal-volumet `akkord-models`).
+Lydfila og alle mellomresultater slettes så snart akkordarket er ferdig. Akkordarket slettes 20 sek
+etter at siden lukkes, og senest etter 15 minutter uten aktivitet. Resultatet sendes fra GPU-en via
+en kø som tømmes med en gang (returverdier fra `spawn()` lagrer Modal i 7 dager, så de inneholder
+bare status). Man laster opp, kopierer og er ferdig. Modellene er det eneste som lagres
+(i Modal-volumet `akkord-models`). Misbruksgrense: 20 opplastinger per IP per time (bare i minnet).
+
+Før lansering: sett et **kostnadstak** i Modal (Settings → Usage/Billing) og les Modals vilkår og
+databehandleravtale (modal.com/legal/terms, modal.com/legal/dpa). Vilkårssiden (`/vilkar`) beskriver
+personvern, lagringstider og opphavsrett for nettversjonen.
 
 ```bash
 brew install uv                               # Mac; se docs.astral.sh/uv for andre systemer
@@ -79,6 +85,7 @@ Innstillinger (miljøvariabler når du kjører `modal deploy`):
 | `AKKORD_GPU_MAX` | `3` | maks samtidige GPU-er = kostnadstak |
 | `AKKORD_MAX_MB` | `60` | maks filstørrelse |
 | `AKKORD_MAX_ACTIVE` | `3` | maks låter i kø per fane |
+| `AKKORD_MAX_PER_HOUR` | `20` | maks opplastinger per IP per time |
 | `AKKORD_SESSION_TTL` | `900` | sekunder uten aktivitet før alt slettes |
 
 Nettmodus kan også testes lokalt uten Modal: `AKKORD_ONLINE=1 python app.py` (analysen kjører

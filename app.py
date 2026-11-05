@@ -26,6 +26,7 @@ SESSION_TTL = int(os.environ.get("AKKORD_SESSION_TTL", 15 * 60))   # sek uten ak
 LEAVE_GRACE = 20               # sek etter «lukket siden» før sletting (dekker omlasting)
 MAX_MB = int(os.environ.get("AKKORD_MAX_MB", 60))
 MAX_ACTIVE = int(os.environ.get("AKKORD_MAX_ACTIVE", 3))           # låter i kø per økt
+MAX_PER_HOUR = int(os.environ.get("AKKORD_MAX_PER_HOUR", 20))      # opplastinger per IP per time (bare i minnet)
 WORKERS = int(os.environ.get("AKKORD_WORKERS", 1))                 # samtidige jobber (GPU på nett)
 SESSION_RE = re.compile(r"^[A-Za-z0-9-]{16,64}$")
 PORT = int(os.environ.get("AKKORD_PORT", 8765))
@@ -323,6 +324,44 @@ def run_job_local(jid):
 RUNNER = run_job_local        # modal_app.py bytter til en GPU-kjører
 
 
+def purge_inputs(jid):
+    """På nett: slett lydfila og alle mellomresultater så snart jobben er ferdig. Bare
+    akkordarkene (.cho / .chart.cho) blir liggende til siden lukkes."""
+    d = job_dir(jid)
+    try:
+        names = os.listdir(d)
+    except OSError:
+        return
+    for name in names:
+        if name.endswith((".cho",)):
+            continue
+        path = os.path.join(d, name)
+        if os.path.isdir(path):
+            shutil.rmtree(path, ignore_errors=True)
+        else:
+            try:
+                os.remove(path)
+            except OSError:
+                pass
+
+
+uploads_by_ip = {}   # ip -> [tidspunkt] siste time. Bare i minnet, for å hindre misbruk.
+
+
+def rate_limit(request: Request):
+    ip = (request.headers.get("x-forwarded-for") or "").split(",")[0].strip() or \
+        (request.client.host if request.client else "?")
+    now = time.time()
+    with lock:
+        for k in [k for k, ts in uploads_by_ip.items() if not ts or now - ts[-1] > 3600]:
+            uploads_by_ip.pop(k, None)
+        ts = [t for t in uploads_by_ip.get(ip, []) if now - t < 3600]
+        if len(ts) >= MAX_PER_HOUR:
+            raise HTTPException(429, f"Du har lastet opp {MAX_PER_HOUR} låter den siste timen – prøv igjen litt senere.")
+        ts.append(now)
+        uploads_by_ip[ip] = ts
+
+
 def worker():
     while True:
         jid = work.get()
@@ -331,6 +370,8 @@ def worker():
                 ready = jobs.get(jid, {}).get("status") == "queued"
             if ready:
                 run_job(jid)
+                if ONLINE:
+                    purge_inputs(jid)
         except Exception as e:  # noqa: BLE001
             set_job(jid, status="error", stage="Feilet", error=f"Intern feil: {e}",
                     finished=time.time(), persist=True)
@@ -489,6 +530,7 @@ async def create_job(request: Request, file: UploadFile = File(...), lang: str =
                          and j["status"] in ("queued", "running"))
         if active >= MAX_ACTIVE:
             raise HTTPException(429, f"Maks {MAX_ACTIVE} låter i kø om gangen – vent til en er ferdig.")
+        rate_limit(request)
     jid = time.strftime("%Y%m%d-%H%M%S-") + uuid.uuid4().hex[:6]
     os.makedirs(job_dir(jid))
     j = {"id": jid, "session": sid, "name": name, "audio": name + ext, "lang": lang, "separate": separate, "mode": mode,
@@ -565,6 +607,8 @@ def retry(jid: str, request: Request, body: dict | None = Body(None)):
         j = get_job(jid, request)
         if j["status"] in ("queued", "running"):
             raise HTTPException(409, "Jobben kjører allerede")
+        if not os.path.exists(audio_path(j)):
+            raise HTTPException(410, "Lydfila er slettet etter behandlingen – last den opp på nytt.")
         body = body or {}
         if "separate" in body:
             j["separate"] = bool(body["separate"])
