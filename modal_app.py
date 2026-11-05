@@ -20,6 +20,8 @@ import modal
 GPU = os.environ.get("AKKORD_GPU", "L4")          # L4 (24 GB) er et godt pris/fart-valg; T4 er billigere
 GPU_MAX = int(os.environ.get("AKKORD_GPU_MAX", 3))
 APP_DIR, MODELS = "/app", "/models"
+QUEUE_TTL = 15 * 60          # fremdrift + resultat i køen utløper uansett etter 15 min
+RESULT_CHUNK = 100_000       # tegn per kø-melding (godt under Modals grense per verdi)
 HERE = os.path.dirname(os.path.abspath(__file__))
 
 app = modal.App("akkordverktoy")
@@ -89,21 +91,29 @@ def process(audio: bytes, filename: str, lang: str, separate: bool, jid: str, mo
                     if final and not line.startswith("% "):
                         log.append(line)
             if batch and time.time() - last > 0.5:
-                progress.put_many(batch, partition=jid, partition_ttl=3600)
+                progress.put_many(batch, partition=jid, partition_ttl=QUEUE_TTL)
                 batch, last = [], time.time()
         if buf.strip():
             line = buf.decode("utf-8", "replace").strip()
             batch.append((line, True))
             log.append(line)
         if batch:
-            progress.put_many(batch, partition=jid, partition_ttl=3600)
+            progress.put_many(batch, partition=jid, partition_ttl=QUEUE_TTL)
         p.wait()
         cho_path = os.path.splitext(path)[0] + ".cho"
         cho = open(cho_path, encoding="utf-8").read() if os.path.exists(cho_path) else None
         chart_path = os.path.splitext(path)[0] + ".chart.cho"
         chart = open(chart_path, encoding="utf-8").read() if os.path.exists(chart_path) else None
     models.commit()                       # nye modellnedlastinger blir liggende til neste gang
-    return {"returncode": p.returncode, "cho": cho, "chart": chart, "log": "\n".join(log[-80:])}
+    # Resultatet (med sangtekst) sendes gjennom køen, som tømmes med en gang. Returverdien fra et
+    # spawn()-kall lagrer Modal i 7 dager – derfor inneholder den bare status og logg.
+    out = []
+    for field, text in (("cho", cho), ("chart", chart)):
+        for i in range(0, len(text or ""), RESULT_CHUNK):
+            out.append(("__result__", field, text[i:i + RESULT_CHUNK]))
+    if out:
+        progress.put_many(out, partition=jid, partition_ttl=QUEUE_TTL)
+    return {"returncode": p.returncode, "log": "\n".join(log[-80:])}
 
 
 @app.function(image=gpu_image, gpu=GPU, volumes={MODELS: models}, timeout=60 * 60)
@@ -143,11 +153,18 @@ def run_job_modal(jid):
     del audio
     akkord.set_job(jid, remote_cancel=lambda: call.cancel())
     tracker = akkord.Tracker(jid, separate, False, mode)
+    parts = {"cho": [], "chart": []}
+
+    def take(item):                       # fremdriftslinje eller bit av resultatet
+        if len(item) == 3 and item[0] == "__result__":
+            parts[item[1]].append(item[2])
+        else:
+            tracker.line(item[0], item[1])
     result = None
     while result is None:
         try:
-            for line, final in progress.get_many(200, block=True, timeout=1.0, partition=jid):
-                tracker.line(line, final)
+            for item in progress.get_many(200, block=True, timeout=1.0, partition=jid):
+                take(item)
         except Exception:  # noqa: BLE001 – køen er bare fremdrift; resultatet kommer uansett
             time.sleep(1)
         with akkord.lock:
@@ -163,10 +180,10 @@ def run_job_modal(jid):
         except (ModalTimeout, TimeoutError):
             continue
         except Exception as e:  # noqa: BLE001
-            result = {"returncode": -1, "cho": None, "log": f"{type(e).__name__}: {e}"}
+            result = {"returncode": -1, "log": f"{type(e).__name__}: {e}"}
     try:
-        for line, final in progress.get_many(1000, block=False, partition=jid):
-            tracker.line(line, final)
+        for item in progress.get_many(1000, block=False, partition=jid):
+            take(item)
         progress.clear(partition=jid)
     except Exception:  # noqa: BLE001
         pass
@@ -175,6 +192,9 @@ def run_job_modal(jid):
         if j is None:                     # slettet (siden lukket) mens den kjørte
             return
         j.pop("remote_cancel", None)
+    if result is not None:
+        result["cho"] = "".join(parts["cho"]) or None
+        result["chart"] = "".join(parts["chart"]) or None
     if j.get("status") == "cancelled" or result is None:
         akkord.set_job(jid, stage="Avbrutt", finished=time.time())
         return
