@@ -17,7 +17,9 @@ import os
 
 import modal
 
-GPU = os.environ.get("AKKORD_GPU", "L4")          # L4 (24 GB) er et godt pris/fart-valg; T4 er billigere
+# GPU-typer i prioritert rekkefølge: Modal tar den første som er ledig. Bare L4 ga opptil 8 min
+# venting når Modal manglet kapasitet. Alle tre har nok minne (T4: 16 GB) for modellene.
+GPU = [g.strip() for g in os.environ.get("AKKORD_GPU", "L4,A10,T4").split(",") if g.strip()]
 GPU_MAX = int(os.environ.get("AKKORD_GPU_MAX", 3))
 APP_DIR, MODELS = "/app", "/models"
 QUEUE_TTL = 15 * 60          # fremdrift + resultat i køen utløper uansett etter 15 min
@@ -164,16 +166,22 @@ def run_job_modal(jid):
         if len(item) == 3 and item[0] == "__result__":
             parts[item[1]].append(item[2])
         elif item[0] == "• GPU klar":
+            nonlocal gpu_ready
+            gpu_ready = True
             akkord.set_job(jid, stage="GPU klar", detail="starter analysen", progress=0.03)
         else:
             tracker.line(item[0], item[1])
     result = None
+    spawned, gpu_ready, warned = time.time(), False, False
     while result is None:
         try:
             for item in progress.get_many(200, block=True, timeout=1.0, partition=jid):
                 take(item)
         except Exception:  # noqa: BLE001 – køen er bare fremdrift; resultatet kommer uansett
             time.sleep(1)
+        if not gpu_ready and not warned and time.time() - spawned > 120:
+            warned = True                 # Modal har ikke ledig GPU: si det, så ingen tror det har hengt seg
+            akkord.set_job(jid, detail="Modal har kø på GPU-er akkurat nå – venter på første ledige")
         with akkord.lock:
             j = akkord.jobs.get(jid)
             if j is None or j.get("status") == "cancelled":
