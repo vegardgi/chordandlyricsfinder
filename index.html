@@ -75,6 +75,12 @@
     border: 1px solid var(--line); border-radius: 8px; padding: 5px 8px;
   }
   input[type=checkbox] { accent-color: var(--accent); width: 16px; height: 16px; margin: 0; }
+  .mode { display: inline-flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+  .mode input[type=range] { width: 64px; accent-color: var(--accent); margin: 0; cursor: pointer; }
+  .mode-end { border: 0; background: none; padding: 4px 2px; color: var(--muted); font-size: 14px; }
+  .mode-end:hover { border: 0; color: var(--text); }
+  .mode-end[aria-pressed="true"] { color: var(--text); font-weight: 600; }
+  .mode-desc { color: var(--muted); font-size: 13px; }
 
   .drop {
     border: 2px dashed var(--line); border-radius: 16px; background: var(--card);
@@ -204,7 +210,12 @@
         <option value="en">Engelsk</option>
       </select>
     </label>
-    <label><input type="checkbox" id="separate" checked> Skill ut vokal (bedre tekst)</label>
+    <div class="mode" role="group" aria-label="Fart">
+      <button type="button" class="mode-end" data-set="0">Rask</button>
+      <input type="range" id="quality" min="0" max="1" step="1" value="0" aria-label="Rask eller grundig">
+      <button type="button" class="mode-end" data-set="1">Grundig</button>
+      <span class="mode-desc" id="mode-desc"></span>
+    </div>
   </div>
 
   <div class="drop" id="drop" role="button" tabindex="0" aria-label="Velg eller slipp lydfiler">
@@ -238,14 +249,26 @@ const $ = (s, el = document) => el.querySelector(s);
 const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 
 // ------------------------------------------------------------ innstillinger
-const langSel = $("#lang"), sepBox = $("#separate");
+const langSel = $("#lang"), quality = $("#quality");
+// Rask = tekst rett fra lydfila. Grundig = skill ut sangstemmen først (Demucs) – tregere, bedre på band.
+const MODE_DESC = ["ofte godt resultat",
+                   "tregere – prøv hvis Rask ikke ble god nok (skiller ut sangstemmen først)"];
+const isGrundig = () => quality.value === "1";
+function showMode() {
+  $("#mode-desc").textContent = MODE_DESC[+quality.value];
+  quality.setAttribute("aria-valuetext", isGrundig() ? "Grundig" : "Rask");
+  document.querySelectorAll(".mode-end").forEach(b => b.setAttribute("aria-pressed", String(b.dataset.set === quality.value)));
+}
 try {
   const saved = JSON.parse(localStorage.getItem("akkord-opts") || "{}");
   if (saved.lang in LANGS) langSel.value = saved.lang;
-  if (typeof saved.separate === "boolean") sepBox.checked = saved.separate;
+  if (saved.mode === "grundig") quality.value = "1";
 } catch (e) { /* ingen lagring */ }
-const saveOpts = () => { try { localStorage.setItem("akkord-opts", JSON.stringify({ lang: langSel.value, separate: sepBox.checked })); } catch (e) {} };
-langSel.onchange = sepBox.onchange = saveOpts;
+const saveOpts = () => { showMode(); try { localStorage.setItem("akkord-opts", JSON.stringify({ lang: langSel.value, mode: isGrundig() ? "grundig" : "rask" })); } catch (e) {} };
+langSel.onchange = saveOpts;
+quality.oninput = saveOpts;
+document.querySelectorAll(".mode-end").forEach(b => b.onclick = () => { quality.value = b.dataset.set; saveOpts(); });
+showMode();
 
 // ------------------------------------------------------------ små hjelpere
 let toastTimer;
@@ -419,7 +442,7 @@ async function upload(files) {
     const fd = new FormData();
     fd.append("file", f);
     fd.append("lang", langSel.value);
-    fd.append("separate", sepBox.checked ? "true" : "false");
+    fd.append("separate", isGrundig() ? "true" : "false");
     try {
       const j = await api("POST", "/api/jobs", fd);
       expanded.add(j.id);
@@ -440,12 +463,12 @@ const expanded = new Set();     // id-er der forhåndsvisningen er åpen
 let lastData = [], serverOk = true;
 
 function statusLine(j) {
-  const opts = `${LANGS[j.lang] || j.lang}${j.separate ? " · vokalseparasjon" : ""}`;
+  const opts = `${LANGS[j.lang] || j.lang} · ${j.separate ? "Grundig" : "Rask"}`;
   if (j.status === "queued") return `I kø${j.ahead ? ` (${j.ahead} foran deg)` : ""} · ${opts}`;
   if (j.status === "running") return `${j.stage}${j.detail ? " – " + j.detail : ""}`;
   if (j.status === "done") {
     const used = j.lang_used ? (LANGS[j.lang_used] || j.lang_used) : (LANGS[j.lang] || j.lang);
-    return `Ferdig · ${j.lang === "auto" && j.lang_used ? "Auto → " : ""}${used}${j.separate ? " · vokalseparasjon" : ""}`;
+    return `Ferdig · ${j.lang === "auto" && j.lang_used ? "Auto → " : ""}${used} · ${j.separate ? "Grundig" : "Rask"}`;
   }
   if (j.status === "error") return `Feilet · ${j.error || ""}`;
   if (j.status === "cancelled") return "Avbrutt";
@@ -526,6 +549,7 @@ function bodyFor(j, state) {
         <a class="btn" href="${withSession(`/api/jobs/${j.id}/cho`)}" download>Last ned .cho</a>
         <button class="edit" type="button">Rediger</button>
         <span class="spacer"></span>
+        ${j.separate ? "" : `<button class="try-grundig" type="button" title="Skiller ut sangstemmen før teksten gjenkjennes – tregere, men bedre på låter med fullt band">Ikke bra nok? Prøv Grundig</button>`}
         <button class="retry" type="button">Kjør på nytt …</button>
         <button class="danger del" type="button">Slett</button>
       </div>
@@ -548,12 +572,14 @@ function bodyFor(j, state) {
     $(".copy-plain", body).onclick = async () =>
       toast(await copyText(plain) ? "Akkord over tekst kopiert" : "Kunne ikke kopiere");
     $(".edit", body).onclick = () => { state.editing = true; update(j, true); };
+    const tg = $(".try-grundig", body);
+    if (tg) tg.onclick = () => retry(j, { separate: true, lang: j.lang });
   } else if (j.status === "error" || j.status === "cancelled") {
     body.innerHTML = `
       ${j.status === "error" ? `<p class="err-msg">${esc(j.error || "Noe gikk galt")}</p>` : ""}
       ${j.log ? `<pre class="log">${esc(j.log)}</pre>` : ""}
       <div class="actions">
-        ${j.separate ? `<button class="primary retry-nosep" type="button">Prøv igjen uten vokalseparasjon</button>` : ""}
+        ${j.separate ? `<button class="primary retry-nosep" type="button">Prøv igjen med Rask</button>` : ""}
         <button class="retry" type="button">Prøv igjen …</button>
         <span class="spacer"></span>
         <button class="danger del" type="button">Slett</button>
@@ -572,7 +598,7 @@ function bodyFor(j, state) {
   if (rb) rb.onclick = () => { state.retryOpen = !state.retryOpen; update(j, true); };
   const go = $(".retry-go", body);
   if (go) go.onclick = () => retry(j, {
-    lang: $(".r-lang", body).value, separate: $(".r-sep", body).checked,
+    lang: $(".r-lang", body).value, separate: $(".r-mode", body).value === "grundig",
   });
   return body;
 }
@@ -581,7 +607,10 @@ function retryRow(j, state) {
   const opts = Object.entries(LANGS).map(([v, t]) => `<option value="${v}" ${v === j.lang ? "selected" : ""}>${t}</option>`).join("");
   return `<div class="retry-row ${state.retryOpen ? "show" : ""}">
       <label>Språk <select class="r-lang">${opts}</select></label>
-      <label><input type="checkbox" class="r-sep" ${j.separate ? "checked" : ""}> Skill ut vokal</label>
+      <label>Fart <select class="r-mode">
+        <option value="rask" ${j.separate ? "" : "selected"}>Rask</option>
+        <option value="grundig" ${j.separate ? "selected" : ""}>Grundig (tregere)</option>
+      </select></label>
       <button class="primary retry-go" type="button">Start ny gjenkjenning</button>
       ${j.status === "done" ? `<span class="job-sub">Teksten gjenkjennes på nytt – egne endringer i .cho overskrives.</span>` : ""}
     </div>`;

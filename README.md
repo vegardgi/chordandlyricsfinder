@@ -24,7 +24,9 @@ Deretter åpnes appen i nettleseren på <http://localhost:8765>.
 
 - Slipp én eller flere lydfiler hvor som helst i vinduet (eller klikk for å velge).
   mp3, wav, m4a, flac, ogg, aiff – ffmpeg trengs ikke.
-- Velg språk (Auto / Bokmål / Nynorsk / Engelsk) og om vokalen skal skilles ut.
+- Velg språk (Auto / Bokmål / Nynorsk / Engelsk) og fart: **Rask** (standard, ofte godt resultat)
+  eller **Grundig** (tregere: skiller ut sangstemmen med Demucs først – bedre på låter med fullt band).
+  Ferdige Rask-låter har en snarvei: «Ikke bra nok? Prøv Grundig».
 - Låtene kjøres én om gangen i en kø, med steg, fremdrift og tid brukt.
 - Ferdig låt vises med akkordene over teksten, i tre visninger: **Akkordark**,
   **Akkord over tekst** (ren tekst med akkordlinje over tekstlinje, fast bredde) og **ChordPro**.
@@ -32,8 +34,7 @@ Deretter åpnes appen i nettleseren på <http://localhost:8765>.
   **Last ned .cho**, **Rediger** (Ctrl/⌘+S lagrer), **Kjør på nytt** med andre valg, **Slett**.
 - Nederst: lenke til vilkår, opphavsrett og personvern (`/vilkar`).
 - Alle ferdige `.cho`-filer kopieres til mappa `ferdige/` («Åpne mappe med ferdige filer»).
-- Feiler en jobb, vises årsaken og et logg-utdrag, med knapp for å prøve igjen uten
-  vokalseparasjon.
+- Feiler en jobb, vises årsaken og et logg-utdrag, med knapp for å prøve igjen med Rask.
 
 Lukk terminalvinduet for å stoppe appen. Starter du den når den allerede kjører,
 åpnes bare nettleseren. Jobbene ligger i `jobber/<id>/` og vises igjen etter omstart.
@@ -119,7 +120,7 @@ Målt på en skymaskin med 4 CPU-kjerner uten GPU (den tregeste plattformen appe
 
 Minnetopp: ~7 GB (før: 11,7 GB). På Apple Silicon kjører Demucs på GPU (MPS) og faster-whisper
 bruker Apples Accelerate, så det bør gå klart raskere enn tallene over (ikke målt ennå).
-Uten «Skill ut vokal» spares hele Demucs-steget. Hver låt rapporterer tid per steg
+Med **Rask** spares hele Demucs-steget. Hver låt rapporterer tid per steg
 («Tid: vokal …, språk …, tekst …, akkorder …») nederst i forhåndsvisningen og i loggen.
 
 Slik er det gjort raskt:

@@ -139,7 +139,7 @@ def friendly_error(code, log):
     low = log.lower()
     if code in (-9, 137, 9) or "out of memory" in low or "memoryerror" in low \
             or "cannot allocate memory" in low:
-        return "For lite minne – lukk andre programmer, eller prøv igjen uten vokalseparasjon"
+        return "For lite minne – lukk andre programmer, eller prøv igjen med Rask"
     if "no space left" in low:
         return "Disken er full – slett gamle jobber eller frigjør plass"
     if any(s in low for s in ("connectionerror", "max retries", "name resolution",
@@ -451,7 +451,7 @@ async def leave(request: Request):
 
 @app.post("/api/jobs")
 async def create_job(request: Request, file: UploadFile = File(...), lang: str = Form("auto"),
-                     separate: bool = Form(True)):
+                     separate: bool = Form(False)):
     sid = session_of(request)
     name, ext = safe_name(file.filename)
     if ext not in AUDIO_EXT:
