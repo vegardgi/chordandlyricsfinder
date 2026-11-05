@@ -192,7 +192,7 @@
   /* utskrift / PDF: bare arket */
   #print-area { display: none; }
   @media print {
-    @page { margin: 16mm 14mm; }
+    @page { size: A4 portrait; margin: 16mm 14mm; }
     html, body { background: #fff !important; color: #000; }
     body > *:not(#print-area) { display: none !important; }
     #print-area .chip { background: none; border: 1px solid #999; }
